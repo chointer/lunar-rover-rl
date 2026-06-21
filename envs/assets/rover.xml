@@ -8,6 +8,8 @@
     <material name="body_mat"  rgba="0.5 0.5 0.5 1"/>
     <material name="wheel_mat" rgba="0.2 0.2 0.2 1"/>
     <material name="floor_mat" rgba="0.8 0.8 0.8 1"/>
+    <!-- nrow/ncol: 격자 해상도, size: 실제 크기(x, y, 최대높이, 기저높이) -->
+    <hfield name="terrain" nrow="64" ncol="64" size="10 10 2 0.1"/>
   </asset>
 
   <!-- ========== 기본값 ========== -->
@@ -27,7 +29,7 @@
     <!-- 조명 -->
     <light name="top_light" pos="0 0 10" dir="0 0 -1" diffuse="1 1 1"/>
 
-    <geom name="floor" type="plane" size="10 10 0.1" pos="0 0 0" friction="0.4 0.01 0.01"/>
+    <geom name="terrain" type="hfield" hfield="terrain" friction="0.4 0.01 0.01"/>
 
     <!-- ===== Rover 본체 ===== -->
     <!--
