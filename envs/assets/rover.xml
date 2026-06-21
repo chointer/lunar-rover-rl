@@ -1,0 +1,98 @@
+<mujoco model="lunar_rover">
+
+  <!-- ========== 물리 옵션: 달 환경 ========== -->
+  <option timestep="0.005" gravity="0 0 -1.62"/>
+
+  <!-- ========== 재질 정의 ========== -->
+  <asset>
+    <material name="body_mat"  rgba="0.5 0.5 0.5 1"/>
+    <material name="wheel_mat" rgba="0.2 0.2 0.2 1"/>
+    <material name="floor_mat" rgba="0.8 0.8 0.8 1"/>
+  </asset>
+
+  <!-- ========== 기본값 ========== -->
+  <default>
+    <geom friction="0.4 0.01 0.01"/>
+    
+    <!-- 바퀴 공통 속성: euler="90 0 0"으로 cylinder 축을 y축(힌지 회전축)에 정렬 -->
+    <default class="wheel">
+      <geom type="cylinder" size="0.15 0.08" mass="2"
+            material="wheel_mat" friction="0.4 0.01 0.01" euler="90 0 0"/>
+      <joint type="hinge" axis="0 1 0" damping="0.1"/>
+    </default>
+  </default>
+
+  <worldbody>
+
+    <!-- 조명 -->
+    <light name="top_light" pos="0 0 10" dir="0 0 -1" diffuse="1 1 1"/>
+
+    <geom name="floor" type="plane" size="10 10 0.1" pos="0 0 0" friction="0.4 0.01 0.01"/>
+
+    <!-- ===== Rover 본체 ===== -->
+    <!--
+      pos: 초기 위치 (z=0.25: 바퀴 반지름만큼 띄워서 시작)
+      free joint: 6DOF 자유롭게 움직임
+      size: 가로 0.8m, 세로 0.6m, 높이 0.2m
+    -->
+    <body name="chassis" pos="0 0 0.25">
+      <joint name="root" type="free"/>
+      <geom name="chassis_geom"
+            type="box"
+            size="0.4 0.3 0.1"
+            mass="20"
+            material="body_mat"/>
+      <site name="chassis_site" pos="0 0 0" size="0.01"/>
+
+      <!-- ===== 바퀴 4개: 공통 속성은 default class="wheel" 참조 ===== -->
+      <!-- pos: chassis 기준 상대 위치 (앞/뒤 ±0.35, 좌/우 ±0.32, 높이 -0.1) -->
+      <body name="wheel_fl" pos=" 0.35  0.32 -0.1">
+        <joint name="wheel_fl_hinge" class="wheel"/>
+        <geom  name="wheel_fl_geom"  class="wheel"/>
+      </body>
+
+      <body name="wheel_fr" pos=" 0.35 -0.32 -0.1">
+        <joint name="wheel_fr_hinge" class="wheel"/>
+        <geom  name="wheel_fr_geom"  class="wheel"/>
+      </body>
+
+      <body name="wheel_rl" pos="-0.35  0.32 -0.1">
+        <joint name="wheel_rl_hinge" class="wheel"/>
+        <geom  name="wheel_rl_geom"  class="wheel"/>
+      </body>
+
+      <body name="wheel_rr" pos="-0.35 -0.32 -0.1">
+        <joint name="wheel_rr_hinge" class="wheel"/>
+        <geom  name="wheel_rr_geom"  class="wheel"/>
+      </body>
+
+    </body>
+  </worldbody>
+
+  <!-- ========== 액추에이터 ==========
+    velocity: 목표 속도를 지정하면 그 속도로 회전
+    4바퀴 모두 독립 제어 (나중에 differential drive로 묶을 수 있음)
+    ctrlrange: 최대 회전 속도 제한 (rad/s)
+  -->
+  <actuator>
+    <velocity name="act_fl" joint="wheel_fl_hinge" ctrlrange="-10 10" kv="5"/>
+    <velocity name="act_fr" joint="wheel_fr_hinge" ctrlrange="-10 10" kv="5"/>
+    <velocity name="act_rl" joint="wheel_rl_hinge" ctrlrange="-10 10" kv="5"/>
+    <velocity name="act_rr" joint="wheel_rr_hinge" ctrlrange="-10 10" kv="5"/>
+  </actuator>
+
+  <!-- ========== 센서 ==========
+    gyro: 각속도 (IMU)
+    velocimeter: 선속도
+    jointvel: 바퀴 회전속도 (slip ratio 계산용)
+  -->
+  <sensor>
+    <gyro    name="imu_gyro"   site="chassis_site"/>
+    <velocimeter name="imu_vel" site="chassis_site"/>
+    <jointvel name="vel_fl" joint="wheel_fl_hinge"/>
+    <jointvel name="vel_fr" joint="wheel_fr_hinge"/>
+    <jointvel name="vel_rl" joint="wheel_rl_hinge"/>
+    <jointvel name="vel_rr" joint="wheel_rr_hinge"/>
+  </sensor>
+
+</mujoco>
