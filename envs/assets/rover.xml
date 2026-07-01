@@ -48,14 +48,25 @@
 
       <!-- ===== 바퀴 4개: 공통 속성은 default class="wheel" 참조 ===== -->
       <!-- pos: chassis 기준 상대 위치 (앞/뒤 ±0.35, 좌/우 ±0.32, 높이 -0.1) -->
-      <body name="wheel_fl" pos=" 0.35  0.32 -0.1">
-        <joint name="wheel_fl_hinge" class="wheel"/>
-        <geom  name="wheel_fl_geom"  class="wheel"/>
+
+      <!-- 앞바퀴: steer body(z축 조향 hinge) → wheel body(y축 구름 hinge) 2단 구조 -->
+      <body name="steer_fl" pos=" 0.35  0.32 -0.1">
+        <!-- z축 hinge: 위에서 볼 때 회전 = 좌우 조향. range ±0.5 rad ≈ ±28° -->
+        <joint name="steer_fl_joint" type="hinge" axis="0 0 1"
+               range="-0.5 0.5" damping="2.0"/>
+        <body name="wheel_fl" pos="0 0 0">
+          <joint name="wheel_fl_hinge" class="wheel"/>
+          <geom  name="wheel_fl_geom"  class="wheel"/>
+        </body>
       </body>
 
-      <body name="wheel_fr" pos=" 0.35 -0.32 -0.1">
-        <joint name="wheel_fr_hinge" class="wheel"/>
-        <geom  name="wheel_fr_geom"  class="wheel"/>
+      <body name="steer_fr" pos=" 0.35 -0.32 -0.1">
+        <joint name="steer_fr_joint" type="hinge" axis="0 0 1"
+               range="-0.5 0.5" damping="2.0"/>
+        <body name="wheel_fr" pos="0 0 0">
+          <joint name="wheel_fr_hinge" class="wheel"/>
+          <geom  name="wheel_fr_geom"  class="wheel"/>
+        </body>
       </body>
 
       <body name="wheel_rl" pos="-0.35  0.32 -0.1">
@@ -72,15 +83,22 @@
   </worldbody>
 
   <!-- ========== 액추에이터 ==========
-    velocity: 목표 속도를 지정하면 그 속도로 회전
-    4바퀴 모두 독립 제어 (나중에 differential drive로 묶을 수 있음)
-    ctrlrange: 최대 회전 속도 제한 (rad/s)
+    ctrl 인덱스:
+      [0] act_steer_fl — 앞좌 조향 (position, rad)
+      [1] act_steer_fr — 앞우 조향 (position, rad)
+      [2] act_fl       — 앞좌 구동 (velocity, rad/s)
+      [3] act_fr       — 앞우 구동 (velocity, rad/s)
+      [4] act_rl       — 뒷좌 구동 (velocity, rad/s)
+      [5] act_rr       — 뒷우 구동 (velocity, rad/s)
+    kp=50: position 추종 강성. damping=2.0과 짝을 이뤄 진동 없이 목표각 추종
   -->
   <actuator>
-    <velocity name="act_fl" joint="wheel_fl_hinge" ctrlrange="-10 10" kv="5"/>
-    <velocity name="act_fr" joint="wheel_fr_hinge" ctrlrange="-10 10" kv="5"/>
-    <velocity name="act_rl" joint="wheel_rl_hinge" ctrlrange="-10 10" kv="5"/>
-    <velocity name="act_rr" joint="wheel_rr_hinge" ctrlrange="-10 10" kv="5"/>
+    <position name="act_steer_fl" joint="steer_fl_joint" ctrlrange="-0.5 0.5" kp="50"/>
+    <position name="act_steer_fr" joint="steer_fr_joint" ctrlrange="-0.5 0.5" kp="50"/>
+    <velocity  name="act_fl"      joint="wheel_fl_hinge" ctrlrange="-10 10"   kv="5"/>
+    <velocity  name="act_fr"      joint="wheel_fr_hinge" ctrlrange="-10 10"   kv="5"/>
+    <velocity  name="act_rl"      joint="wheel_rl_hinge" ctrlrange="-10 10"   kv="5"/>
+    <velocity  name="act_rr"      joint="wheel_rr_hinge" ctrlrange="-10 10"   kv="5"/>
   </actuator>
 
   <!-- ========== 센서 ==========

@@ -6,8 +6,8 @@ from scipy.ndimage import gaussian_filter
 from pynput import keyboard
 from pynput.keyboard import Key
 
-MAX_SPEED = 5.0   # rad/s — 전진/후진 최대 바퀴 속도
-TURN_RATE = 2.5   # rad/s — 회전 시 좌우 속도 차이
+MAX_SPEED = 5.0  # rad/s — 전진/후진 최대 바퀴 속도
+MAX_STEER = 0.5  # rad   — 최대 조향각 (±28°)
 
 NROW, NCOL = 64, 64
 TERRAIN_HALF_X = 10   # rover.xml size[0]
@@ -53,7 +53,7 @@ listener = keyboard.Listener(on_press=on_press, on_release=on_release)
 listener.start()
 
 # ===== 조작 방법 안내 =====
-print("↑/↓: 전진/후진 | ←/→: 좌/우 회전 | 뷰어 창에서 Q: 종료")
+print("↑/↓: 전진/후진 | ←/→: 좌/우 조향 | 뷰어 창에서 Q: 종료")
 
 model = mujoco.MjModel.from_xml_path("envs/assets/rover.xml")
 data  = mujoco.MjData(model)
@@ -76,15 +76,16 @@ with mujoco.viewer.launch_passive(model, data) as viewer:
     viewer.cam.azimuth   = 135
 
     while viewer.is_running():
-        # 키 → (전진속도 v, 회전속도 w)
-        v = MAX_SPEED if Key.up in keys else (-MAX_SPEED if Key.down in keys else 0.0)
-        w = -TURN_RATE if Key.right in keys else (TURN_RATE if Key.left in keys else 0.0)
+        speed = MAX_SPEED if Key.up in keys else (-MAX_SPEED if Key.down in keys else 0.0)
+        steer = MAX_STEER if Key.left in keys else (-MAX_STEER if Key.right in keys else 0.0)
 
-        # differential drive → 4개 actuator (act_fl, act_fr, act_rl, act_rr)
-        data.ctrl[0] = v - w  # FL (left)
-        data.ctrl[1] = v + w  # FR (right)
-        data.ctrl[2] = v - w  # RL (left)
-        data.ctrl[3] = v + w  # RR (right)
+        # Ackermann: ctrl[0~1] 조향 position, ctrl[2~5] 구동 velocity
+        data.ctrl[0] = steer  # act_steer_fl
+        data.ctrl[1] = steer  # act_steer_fr
+        data.ctrl[2] = speed  # act_fl
+        data.ctrl[3] = speed  # act_fr
+        data.ctrl[4] = speed  # act_rl
+        data.ctrl[5] = speed  # act_rr
 
         step_start = time.perf_counter()
         mujoco.mj_step(model, data)
