@@ -3,8 +3,7 @@ import mujoco
 import mujoco.viewer
 import numpy as np
 from scipy.ndimage import gaussian_filter
-from pynput import keyboard
-from pynput.keyboard import Key
+from keyboard_input import KeyboardInput, KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT
 
 MAX_SPEED = 5.0  # rad/s — 전진/후진 최대 바퀴 속도
 MAX_STEER = 0.5  # rad   — 최대 조향각 (±28°)
@@ -41,19 +40,11 @@ def terrain_height_at(heightmap, x, y):
     return float(heightmap[row, col]) * TERRAIN_MAX_H
 
 # ===== 키보드 상태 추적 =====
-keys = set()
-
-def on_press(key):
-    keys.add(key)
-
-def on_release(key):
-    keys.discard(key)
-
-listener = keyboard.Listener(on_press=on_press, on_release=on_release)
-listener.start()
+# 터미널 창에 포커스를 두고 화살표 키 입력, 뷰어 창은 시뮬 확인용
+kb = KeyboardInput()
 
 # ===== 조작 방법 안내 =====
-print("↑/↓: 전진/후진 | ←/→: 좌/우 조향 | 뷰어 창에서 Q: 종료")
+print("터미널 창 포커스 유지 | ↑/↓: 전진/후진 | ←/→: 좌/우 조향 | Ctrl+C: 종료")
 
 model = mujoco.MjModel.from_xml_path("envs/assets/rover.xml")
 data  = mujoco.MjData(model)
@@ -76,16 +67,23 @@ with mujoco.viewer.launch_passive(model, data) as viewer:
     viewer.cam.azimuth   = 135
 
     while viewer.is_running():
-        speed = MAX_SPEED if Key.up in keys else (-MAX_SPEED if Key.down in keys else 0.0)
-        steer = MAX_STEER if Key.left in keys else (-MAX_STEER if Key.right in keys else 0.0)
+        speed = MAX_SPEED if kb.is_held(KEY_UP) else (-MAX_SPEED if kb.is_held(KEY_DOWN) else 0.0)
+        steer = MAX_STEER if kb.is_held(KEY_LEFT) else (-MAX_STEER if kb.is_held(KEY_RIGHT) else 0.0)
 
         # Ackermann: ctrl[0~1] 조향 position, ctrl[2~5] 구동 velocity
         data.ctrl[0] = steer  # act_steer_fl
         data.ctrl[1] = steer  # act_steer_fr
-        data.ctrl[2] = speed  # act_fl
-        data.ctrl[3] = speed  # act_fr
-        data.ctrl[4] = speed  # act_rl
-        data.ctrl[5] = speed  # act_rr
+        if speed != 0.0:
+            data.ctrl[2] = speed  # act_fl
+            data.ctrl[3] = speed  # act_fr
+            data.ctrl[4] = speed  # act_rl
+            data.ctrl[5] = speed  # act_rr
+        else:
+            # 키를 놓으면 현재 속도 유지 → 관성으로 자연감속 (토크=0)
+            data.ctrl[2] = data.sensor('vel_fl').data[0]
+            data.ctrl[3] = data.sensor('vel_fr').data[0]
+            data.ctrl[4] = data.sensor('vel_rl').data[0]
+            data.ctrl[5] = data.sensor('vel_rr').data[0]
 
         step_start = time.perf_counter()
         mujoco.mj_step(model, data)
@@ -93,4 +91,3 @@ with mujoco.viewer.launch_passive(model, data) as viewer:
         elapsed = time.perf_counter() - step_start
         time.sleep(max(0, model.opt.timestep - elapsed))
 
-listener.stop()
