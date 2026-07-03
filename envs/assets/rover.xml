@@ -1,7 +1,13 @@
 <mujoco model="lunar_rover">
 
-  <!-- ========== 물리 옵션: 달 환경 ========== -->
-  <option timestep="0.005" gravity="0 0 -1.62"/>
+  <!-- angle=radian: 모든 각도를 라디안으로 해석 (미지정 시 기본은 degree라
+       joint range="-0.5 0.5"가 ±0.5도로 오해석됨) -->
+  <compiler angle="radian"/>
+
+  <!-- ========== 물리 옵션: 달 환경 ==========
+    integrator=implicitfast: 감쇠·액추에이터가 있을 때 Euler보다 안정적
+    (달 저중력에서 튀는 현상 완화) -->
+  <option timestep="0.005" gravity="0 0 -1.62" integrator="implicitfast"/>
 
   <!-- ========== 재질 정의 ========== -->
   <asset>
@@ -14,15 +20,22 @@
 
   <!-- ========== 기본값 ========== -->
   <default>
-    <geom friction="0.4 0.01 0.01"/>
+    <!-- solref="0.02 1.5": 접촉을 살짝 과감쇠(dampratio>1)시켜 반발 억제 -->
+    <geom friction="0.4 0.01 0.01" solref="0.02 1.5"/>
     
-    <!-- 바퀴 공통 속성: euler="90 0 0"으로 cylinder 축을 y축(힌지 회전축)에 정렬 -->
+    <!-- 바퀴 공통 속성: euler로 cylinder 축을 y축(힌지 회전축)에 정렬 (π/2 rad = 90°) -->
     <default class="wheel">
       <geom type="cylinder" size="0.15 0.08" mass="2"
-            material="wheel_mat" friction="0.4 0.01 0.01" euler="90 0 0"/>
+            material="wheel_mat" friction="0.4 0.01 0.01" euler="1.5708 0 0"/>
       <joint type="hinge" axis="0 1 0" damping="0.1"/>
     </default>
   </default>
+
+  <!-- chassis-앞바퀴 충돌 제외: 조부모-손자 관계는 MuJoCo가 자동 제외 안 함 -->
+  <contact>
+    <exclude body1="chassis" body2="wheel_fl"/>
+    <exclude body1="chassis" body2="wheel_fr"/>
+  </contact>
 
   <worldbody>
 
@@ -51,21 +64,25 @@
 
       <!-- 앞바퀴: steer body(z축 조향 hinge) → wheel body(y축 구름 hinge) 2단 구조 -->
       <body name="steer_fl" pos=" 0.35  0.32 -0.1">
+        <inertial pos="0 0 0" mass="0.5" diaginertia="0.01 0.01 0.01"/>
         <!-- z축 hinge: 위에서 볼 때 회전 = 좌우 조향. range ±0.5 rad ≈ ±28° -->
         <joint name="steer_fl_joint" type="hinge" axis="0 0 1"
                range="-0.5 0.5" damping="2.0"/>
         <body name="wheel_fl" pos="0 0 0">
           <joint name="wheel_fl_hinge" class="wheel"/>
           <geom  name="wheel_fl_geom"  class="wheel"/>
+          <geom type="box" size="0.02 0.08 0.14" rgba="1 1 0 1" mass="0" contype="0" conaffinity="0"/>
         </body>
       </body>
 
       <body name="steer_fr" pos=" 0.35 -0.32 -0.1">
+        <inertial pos="0 0 0" mass="0.5" diaginertia="0.01 0.01 0.01"/>
         <joint name="steer_fr_joint" type="hinge" axis="0 0 1"
                range="-0.5 0.5" damping="2.0"/>
         <body name="wheel_fr" pos="0 0 0">
           <joint name="wheel_fr_hinge" class="wheel"/>
           <geom  name="wheel_fr_geom"  class="wheel"/>
+          <geom type="box" size="0.02 0.08 0.14" rgba="1 1 0 1" mass="0" contype="0" conaffinity="0"/>
         </body>
       </body>
 
@@ -90,11 +107,12 @@
       [3] act_fr       — 앞우 구동 (velocity, rad/s)
       [4] act_rl       — 뒷좌 구동 (velocity, rad/s)
       [5] act_rr       — 뒷우 구동 (velocity, rad/s)
-    kp=50: position 추종 강성. damping=2.0과 짝을 이뤄 진동 없이 목표각 추종
+    kp=15: position 추종 강성. 낮을수록 목표각에 서서히 수렴 → 부드러운 조향
+           (damping=2.0과 짝을 이뤄 진동 없이 목표각 추종)
   -->
   <actuator>
-    <position name="act_steer_fl" joint="steer_fl_joint" ctrlrange="-0.5 0.5" kp="50"/>
-    <position name="act_steer_fr" joint="steer_fr_joint" ctrlrange="-0.5 0.5" kp="50"/>
+    <position name="act_steer_fl" joint="steer_fl_joint" ctrlrange="-0.5 0.5" kp="15"/>
+    <position name="act_steer_fr" joint="steer_fr_joint" ctrlrange="-0.5 0.5" kp="15"/>
     <velocity  name="act_fl"      joint="wheel_fl_hinge" ctrlrange="-10 10"   kv="5"/>
     <velocity  name="act_fr"      joint="wheel_fr_hinge" ctrlrange="-10 10"   kv="5"/>
     <velocity  name="act_rl"      joint="wheel_rl_hinge" ctrlrange="-10 10"   kv="5"/>
