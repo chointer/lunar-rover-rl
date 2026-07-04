@@ -139,7 +139,7 @@ class LunarRoverEnv(gym.Env):
 
     def _generate_heightmap(self, spawn_row=None, spawn_col=None, flat_radius=12):
         def octave(sigma):
-            return gaussian_filter(np.random.uniform(0, 1, (NROW, NCOL)), sigma=sigma)
+            return gaussian_filter(self.np_random.uniform(0, 1, (NROW, NCOL)), sigma=sigma)
 
         combined = 0.6 * octave(12) + 0.3 * octave(5) + 0.1 * octave(2)
         combined = (combined - combined.min()) / (combined.max() - combined.min())
