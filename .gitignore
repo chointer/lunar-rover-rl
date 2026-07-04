@@ -220,3 +220,4 @@ __marimo__/
 # custom
 docs/intro.md
 .vscode
+envs/assets/temporal_note.xml
