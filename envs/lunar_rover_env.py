@@ -45,17 +45,14 @@ class LunarRoverEnv(gym.Env):
         self._heightmap = self._generate_heightmap()
         self.model.hfield_data[:] = self._heightmap.flatten()     # 새로 생성한 지형을 MuJoCo 모델에 반영
 
-        # 달 레골리스 마찰 랜덤화 (에피소드마다 전체 지형에 단일값 적용)
+        # 달 레골리스 마찰 랜덤화 (에피소드마다 전체 지형에 단일값 적용, 범위는 EnvConfig)
         # sliding 낮음 → 큰 토크 시 바퀴가 지면을 못 잡고 헛돎 (모래 위 wheel spin)
-        #   참고: 콘크리트~0.8, 젖은 흙~0.5, 모래~0.3, 느슨한 레골리스~0.2
         # torsional 높음 → 회전 시 바퀴가 모래를 옆으로 밀어내는 저항 발생
-        #   참고: 딱딱한 지면~0.005, 모래~0.05
         # rolling 높음 → 전진할수록 모래가 쌓이며 저항 증가하는 느낌 (sinkage 근사)
-        #   참고: 딱딱한 지면~0.01, 모래~0.08~0.15
         # 세 값의 조합이 "단단한 바닥과 달리 모래에서 힘을 써도 잘 안 나가는" 거동을 만들어냄
-        sliding   = self.np_random.uniform(0.2, 0.5)
-        torsional = self.np_random.uniform(0.02, 0.08)
-        rolling   = self.np_random.uniform(0.05, 0.12)
+        sliding   = self.np_random.uniform(*self.cfg.friction_sliding)
+        torsional = self.np_random.uniform(*self.cfg.friction_torsional)
+        rolling   = self.np_random.uniform(*self.cfg.friction_rolling)
         self.model.geom('terrain').friction[:] = [sliding, torsional, rolling]
 
         # spawn 위치 설정, 지형 위에 rover 배치

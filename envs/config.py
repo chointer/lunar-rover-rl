@@ -23,3 +23,11 @@ class EnvConfig:
     w_goal:     float = 10.0   # 도달 보너스
     w_flip:     float = 10.0   # 전복 페널티 (reward에서 음수로 적용)
     w_time:     float = 0.01   # 시간 페널티 (매 스텝 −w_time)
+
+    # 마찰 도메인 랜덤화 범위 (reset마다 지형 전체에 단일값을 min~max에서 uniform 추출)
+    #   sliding   낮을수록 잘 미끄러짐 (레골리스 저마찰) — 참고: 콘크리트~0.8, 젖은 흙~0.5, 모래~0.3, 느슨한 레골리스~0.2
+    #   torsional 높을수록 제자리 회전 저항 (모래)      — 참고: 딱딱한 지면~0.005, 모래~0.05
+    #   rolling   높을수록 구름 저항 (sinkage 근사)     — 참고: 딱딱한 지면~0.01, 모래~0.08~0.15
+    friction_sliding:   tuple = (0.2, 0.5)
+    friction_torsional: tuple = (0.02, 0.08)
+    friction_rolling:   tuple = (0.05, 0.12)
