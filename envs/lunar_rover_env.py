@@ -3,6 +3,7 @@ import mujoco
 import gymnasium as gym
 from gymnasium import spaces
 from scipy.ndimage import gaussian_filter, map_coordinates
+from envs.config import EnvConfig
 
 GRID_ROWS = 7
 GRID_COLS = 7
@@ -16,8 +17,10 @@ TERRAIN_MAX_H  = 2.0    # rover.xml hfield size[2]
 
 class LunarRoverEnv(gym.Env):
 
-    def __init__(self):
+    def __init__(self, cfg: EnvConfig = None):
         super().__init__()
+        # cfg 미지정 시 기본값. None 기본 인자로 mutable default 공유 문제 회피
+        self.cfg = cfg if cfg is not None else EnvConfig()
 
         self.model = mujoco.MjModel.from_xml_path("envs/assets/rover.xml")
         self.data  = mujoco.MjData(self.model)
@@ -75,10 +78,49 @@ class LunarRoverEnv(gym.Env):
         for _ in range(100):                        # 제어 입력 없이 100스텝 진행하여 rover가 지면에 안착하도록 대기
             mujoco.mj_step(self.model, self.data)
 
+        # 에피소드 상태 초기화 (step에서 사용)
+        self._step_count = 0                        # 타임아웃 카운터
+        self._prev_dist  = float(np.linalg.norm(self._goal - self.data.qpos[:2]))  # potential reward 기준 거리
+
         return self._get_obs(), {}
 
     def step(self, action):
-        pass
+        # 1. action[-1,1] → ctrl (조향 2 + 구동 4)
+        speed = float(action[0]) * self.cfg.max_speed
+        steer = float(action[1]) * self.cfg.max_steer
+        self.data.ctrl[0]   = steer   # act_steer_fl
+        self.data.ctrl[1]   = steer   # act_steer_fr
+        self.data.ctrl[2:6] = speed   # 구동 4륜
+
+        # 2. frame_skip만큼 물리 진행
+        for _ in range(self.cfg.frame_skip):
+            mujoco.mj_step(self.model, self.data)
+        self._step_count += 1
+
+        # 3. obs
+        obs = self._get_obs()
+
+        # 4. 종료 판정
+        cur_dist    = float(np.linalg.norm(self._goal - self.data.qpos[:2]))
+        roll, pitch = obs[GRID_ROWS * GRID_COLS], obs[GRID_ROWS * GRID_COLS + 1]  # imu 앞 2개
+        reached = cur_dist < self.cfg.goal_radius
+        flipped = (abs(roll)  > np.deg2rad(self.cfg.flip_threshold_deg) or
+                   abs(pitch) > np.deg2rad(self.cfg.flip_threshold_deg))
+        terminated = reached or flipped
+        truncated  = self._step_count >= self.cfg.max_steps
+
+        # 5. reward (항목별 가중합)
+        reward = self._compute_reward(cur_dist, reached, flipped)
+        self._prev_dist = cur_dist   # progress 계산 후 갱신
+
+        return obs, reward, terminated, truncated, {}
+
+    def _compute_reward(self, cur_dist, reached, flipped):
+        r  = self.cfg.w_progress * (self._prev_dist - cur_dist)  # 목표 접근 (직전 대비 거리 감소)
+        r -= self.cfg.w_time                                      # 시간 페널티 (매 스텝)
+        if reached: r += self.cfg.w_goal                          # 도달 보너스
+        if flipped: r -= self.cfg.w_flip                          # 전복 페널티
+        return float(r)
 
     def _get_obs(self):
         height_grid = self._get_height_grid()                          # 49
