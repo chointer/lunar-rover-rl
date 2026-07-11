@@ -1,0 +1,129 @@
+"""LunarRoverEnv를 실시간 뷰어로 돌리는 통합 도구.
+
+세 가지 action 소스를 지원한다 (전부 onscreen viewer라 GPU 없이 동작):
+  python sim_viewer.py                          # 휴리스틱 (목표 방향 자동, env 검증)
+  python sim_viewer.py --manual                 # 키보드 수동 조작
+  python sim_viewer.py --policy models/ppo.zip  # 학습된 정책 (결과 확인)
+
+목표는 빨간 구로 표시하고, 콘솔에 거리·reward·소비일률을 출력한다.
+에피소드가 끝나면 자동 reset한다. (녹화는 학습 스크립트에서 별도로 처리)
+"""
+import argparse
+import time
+import numpy as np
+import mujoco
+import mujoco.viewer
+from envs.lunar_rover_env import LunarRoverEnv
+
+SEED = 0
+
+
+# ===== action 소스 =====
+def heuristic_action(obs):
+    """goal_rel(obs 마지막 2개, rover 로컬)을 향해 조향하며 전진."""
+    goal_rel = obs[-2:]
+    steer = np.clip(np.arctan2(goal_rel[1], goal_rel[0]), -1.0, 1.0)
+    return np.array([1.0, steer], dtype=np.float32)
+
+
+def make_keyboard_action():
+    """키보드 상태로 action을 만드는 함수 반환 (↑↓=전후진, ←→=조향)."""
+    from keyboard_input import KeyboardInput, KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT
+    kb = KeyboardInput()
+
+    def action_fn(_obs):
+        speed = 1.0 if kb.is_held(KEY_UP)   else (-1.0 if kb.is_held(KEY_DOWN)  else 0.0)
+        steer = 1.0 if kb.is_held(KEY_LEFT) else (-1.0 if kb.is_held(KEY_RIGHT) else 0.0)
+        return np.array([speed, steer], dtype=np.float32)
+    return action_fn
+
+
+def make_policy_action(policy_path):
+    """학습된 정책(.zip)을 로드해 action을 만드는 함수 반환 (PPO는 이 모드에서만 import)."""
+    from stable_baselines3 import PPO
+    model = PPO.load(policy_path)
+
+    def action_fn(obs):
+        return model.predict(obs, deterministic=True)[0]
+    return action_fn
+
+
+# ===== 공통 뷰어 루프 =====
+def draw_goal(viewer, env):
+    """목표 지점을 빨간 구로 표시."""
+    gx, gy = env._goal
+    gz = env._terrain_height_at(gx, gy) + 0.3
+    mujoco.mjv_initGeom(
+        viewer.user_scn.geoms[0],
+        type=mujoco.mjtGeom.mjGEOM_SPHERE,
+        size=np.array([0.3, 0.0, 0.0]),
+        pos=np.array([gx, gy, gz]),
+        mat=np.eye(3).flatten(),
+        rgba=np.array([1.0, 0.2, 0.2, 0.6]),
+    )
+    viewer.user_scn.ngeom = 1
+
+
+def run(action_fn, seed=SEED):
+    env = LunarRoverEnv()
+    obs, _ = env.reset(seed=seed)
+
+    with mujoco.viewer.launch_passive(env.model, env.data) as viewer:
+        viewer.cam.distance  = 8.0
+        viewer.cam.elevation = -20
+        viewer.cam.azimuth   = 135
+
+        ep, ep_ret, ep_len = 0, 0.0, 0
+        while viewer.is_running():
+            action = action_fn(obs)
+            obs, reward, terminated, truncated, _ = env.step(action)
+            ep_ret += reward
+            ep_len += 1
+
+            power = float(np.sum(np.abs(env.data.actuator_force * env.data.actuator_velocity)))
+
+            draw_goal(viewer, env)
+            viewer.cam.lookat[:] = env.data.qpos[:3]      # 카메라가 rover를 따라감
+            viewer.sync()
+            time.sleep(env.cfg.frame_skip * env.model.opt.timestep)  # 실시간 재생
+
+            dist = float(np.linalg.norm(env._goal - env.data.qpos[:2]))
+            print(f"\rep{ep} step{ep_len:3d}  dist={dist:5.2f}m  "
+                  f"reward={reward:+.2f}  power={power:5.1f}W  return={ep_ret:+.2f}", end="")
+
+            if terminated or truncated:
+                if dist < env.cfg.goal_radius:
+                    reason = "도달 ✅"
+                elif terminated:
+                    reason = "전복 💥"
+                else:
+                    reason = "타임아웃 ⏱"
+                print(f"   → {reason}  (return={ep_ret:+.2f}, len={ep_len})")
+                ep, ep_ret, ep_len = ep + 1, 0.0, 0
+                obs, _ = env.reset()
+                viewer.update_hfield(0)   # 새 지형을 GPU에 재업로드
+
+
+def main():
+    parser = argparse.ArgumentParser(description="LunarRoverEnv 실시간 뷰어")
+    # action 소스는 하나만: --manual과 --policy는 동시 사용 불가 (없으면 휴리스틱)
+    src = parser.add_mutually_exclusive_group()
+    src.add_argument("--manual", action="store_true", help="키보드 수동 조작")
+    src.add_argument("--policy", type=str, default=None, help="학습된 정책(.zip) 경로")
+    args = parser.parse_args()
+
+    if args.policy:
+        action_fn = make_policy_action(args.policy)
+        print(f"정책 모드: {args.policy}")
+    elif args.manual:
+        action_fn = make_keyboard_action()
+        print("수동 조작 모드 | 터미널 포커스 유지 | ↑↓ 전후진  ←→ 조향  Ctrl+C 종료")
+    else:
+        action_fn = heuristic_action
+        print("휴리스틱 모드 (목표 방향 자동 주행)")
+
+    run(action_fn)
+
+
+if __name__ == "__main__":
+    main()
