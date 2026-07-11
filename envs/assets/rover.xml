@@ -58,6 +58,8 @@
             mass="20"
             material="body_mat"/>
       <site name="chassis_site" pos="0 0 0" size="0.01"/>
+      <!-- 녹화/렌더용 추적 카메라: rover를 위에서 비스듬히(사선 top) 내려다봄. trackcom=위치만 추적(방향 고정) -->
+      <camera name="track" mode="trackcom" pos="0 -4 5" xyaxes="1 0 0 0 0.6 0.8"/>
 
       <!-- ===== 바퀴 4개: 공통 속성은 default class="wheel" 참조 ===== -->
       <!-- pos: chassis 기준 상대 위치 (앞/뒤 ±0.35, 좌/우 ±0.32, 높이 -0.1) -->

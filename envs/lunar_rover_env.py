@@ -16,11 +16,14 @@ TERRAIN_HALF_Y = 10.0   # rover.xml hfield size[1]
 TERRAIN_MAX_H  = 2.0    # rover.xml hfield size[2]
 
 class LunarRoverEnv(gym.Env):
+    metadata = {"render_modes": ["rgb_array"], "render_fps": 20}
 
-    def __init__(self, cfg: EnvConfig = None):
+    def __init__(self, cfg: EnvConfig = None, render_mode=None):
         super().__init__()
         # cfg 미지정 시 기본값. None 기본 인자로 mutable default 공유 문제 회피
         self.cfg = cfg if cfg is not None else EnvConfig()
+        self.render_mode = render_mode
+        self._renderer   = None                       # 첫 render() 호출 시 생성 (지연 초기화)
 
         self.model = mujoco.MjModel.from_xml_path("envs/assets/rover.xml")
         self.data  = mujoco.MjData(self.model)
@@ -118,6 +121,20 @@ class LunarRoverEnv(gym.Env):
         if reached: r += self.cfg.w_goal                          # 도달 보너스
         if flipped: r -= self.cfg.w_flip                          # 전복 페널티
         return float(r)
+
+    def render(self):
+        """rgb_array 모드: mujoco.Renderer로 track 카메라 시점을 이미지로 반환."""
+        if self.render_mode != "rgb_array":
+            return None
+        if self._renderer is None:
+            self._renderer = mujoco.Renderer(self.model, height=480, width=640)
+        self._renderer.update_scene(self.data, camera="track")
+        return self._renderer.render()
+
+    def close(self):
+        if self._renderer is not None:
+            self._renderer.close()
+            self._renderer = None
 
     def _get_obs(self):
         height_grid = self._get_height_grid()                          # 49
