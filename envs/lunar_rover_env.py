@@ -5,10 +5,10 @@ from gymnasium import spaces
 from scipy.ndimage import gaussian_filter, map_coordinates
 from envs.config import EnvConfig
 
-GRID_ROWS = 7
-GRID_COLS = 7
-CELL_SIZE = 0.5   # m/cell
-assert GRID_ROWS % 2 == 1 and GRID_COLS % 2 == 1, "GRID_ROWS, GRID_COLS must be odd"
+SCAN_ROWS = 7
+SCAN_COLS = 7
+SCAN_CELL = 0.5   # m/cell
+assert SCAN_ROWS % 2 == 1 and SCAN_COLS % 2 == 1, "SCAN_ROWS, SCAN_COLS must be odd"
 
 NROW, NCOL     = 64, 64
 TERRAIN_HALF_X = 10.0   # rover.xml hfield size[0]
@@ -28,8 +28,8 @@ class LunarRoverEnv(gym.Env):
         self.model = mujoco.MjModel.from_xml_path("envs/assets/rover.xml")
         self.data  = mujoco.MjData(self.model)
 
-        # obs: height_grid(49) + imu(8) + wheel_vel(4) + goal_rel(2) = 63
-        obs_dim = GRID_ROWS * GRID_COLS + 8 + 4 + 2
+        # obs: height_scan(49) + imu(8) + wheel_vel(4) + goal_rel(2) = 63
+        obs_dim = SCAN_ROWS * SCAN_COLS + 8 + 4 + 2
         self.observation_space = spaces.Box(
             low=-np.inf, high=np.inf, shape=(obs_dim,), dtype=np.float32
         )
@@ -38,6 +38,13 @@ class LunarRoverEnv(gym.Env):
         self.action_space = spaces.Box(
             low=-1.0, high=1.0, shape=(2,), dtype=np.float32
         )
+
+        # obs height scan의 로컬 오프셋(중심 기준, 고정) — 매 스텝 재생성하지 않도록 미리 계산
+        hr, hc = SCAN_ROWS // 2, SCAN_COLS // 2
+        ii, jj = np.meshgrid(np.arange(SCAN_ROWS), np.arange(SCAN_COLS), indexing='ij')
+        dx_local = (ii - hr) * SCAN_CELL   # 전방(+) / 후방(-)
+        dy_local = (jj - hc) * SCAN_CELL   # 좌(+) / 우(-)
+        self._scan_offsets = np.stack([dx_local.flatten(), dy_local.flatten()])  # (2, 49)
 
     def reset(self, *, seed=None, options=None):
         super().reset(seed=seed)
@@ -102,7 +109,7 @@ class LunarRoverEnv(gym.Env):
 
         # 4. 종료 판정
         cur_dist    = float(np.linalg.norm(self._goal - self.data.qpos[:2]))
-        roll, pitch = obs[GRID_ROWS * GRID_COLS], obs[GRID_ROWS * GRID_COLS + 1]  # imu 앞 2개
+        roll, pitch = obs[SCAN_ROWS * SCAN_COLS], obs[SCAN_ROWS * SCAN_COLS + 1]  # imu 앞 2개
         reached = cur_dist < self.cfg.goal_radius
         flipped = (abs(roll)  > np.deg2rad(self.cfg.flip_threshold_deg) or
                    abs(pitch) > np.deg2rad(self.cfg.flip_threshold_deg))
@@ -129,7 +136,36 @@ class LunarRoverEnv(gym.Env):
         if self._renderer is None:
             self._renderer = mujoco.Renderer(self.model, height=480, width=640)
         self._renderer.update_scene(self.data, camera="track")
+        self._draw_markers(self._renderer.scene, self._get_height_scan())
         return self._renderer.render()
+
+    def _draw_markers(self, scene, height_scan):
+        """목표(빨간 구)와 obs 관측 지점(파란 점 49개)을 주어진 MjvScene에 이어 붙인다.
+
+        scene.ngeom부터 append하므로 뷰어의 user_scn·render의 renderer.scene 양쪽에서 공용.
+        height_scan: obs 앞 49개(rover 기준 상대 높이). 각 점 z = 상대높이 + rover z로 복원해
+        지형 재샘플링 없이 그린다 (뷰어는 obs에서, render는 _get_height_scan()로 넘김).
+        """
+        def add(pos, size, rgba):
+            mujoco.mjv_initGeom(
+                scene.geoms[scene.ngeom],
+                type=mujoco.mjtGeom.mjGEOM_SPHERE,
+                size=np.array([size, 0.0, 0.0]),
+                pos=np.asarray(pos, dtype=float),
+                mat=np.eye(3).flatten(),
+                rgba=np.asarray(rgba, dtype=float),
+            )
+            scene.ngeom += 1
+
+        # 목표: 빨간 구
+        gx, gy = self._goal
+        add([gx, gy, self._terrain_height_at(gx, gy) + 0.3], 0.3, [1.0, 0.2, 0.2, 0.6])
+
+        # obs 관측 지점: (x,y)는 _scan_world_xy, z는 상대높이 + rover z
+        wx, wy = self._scan_world_xy()
+        wz = height_scan + self.data.qpos[2]
+        for x, y, z in zip(wx, wy, wz):
+            add([x, y, z], 0.04, [0.2, 0.5, 1.0, 0.9])
 
     def close(self):
         if self._renderer is not None:
@@ -137,38 +173,41 @@ class LunarRoverEnv(gym.Env):
             self._renderer = None
 
     def _get_obs(self):
-        height_grid = self._get_height_grid()                          # 49
+        height_scan = self._get_height_scan()                          # 49
         imu         = self._get_imu()                                  # 8
         wheel_vel   = self.data.sensordata[6:10].astype(np.float32)   # 4
         goal_rel    = self._get_goal_rel()                             # 2
-        return np.concatenate([height_grid, imu, wheel_vel, goal_rel])
+        return np.concatenate([height_scan, imu, wheel_vel, goal_rel])
 
-    def _get_height_grid(self):
-        # TODO: 전방/후방 비율 조정 검토 (현재 대칭: 전방 3칸, 후방 3칸)
-        rx, ry, rz = self.data.qpos[:3]
-        yaw = self._get_yaw()
-        half_r, half_c = GRID_ROWS // 2, GRID_COLS // 2
-
-        # 7×7 로컬 오프셋 그리드 생성
-        ii, jj = np.meshgrid(np.arange(GRID_ROWS), np.arange(GRID_COLS), indexing='ij')
-        dx_local = (ii - half_r) * CELL_SIZE   # 전방(+) / 후방(-)
-        dy_local = (jj - half_c) * CELL_SIZE   # 좌(+) / 우(-)
-
-        # 로컬 오프셋 → world 좌표 (local → world 회전)
-        R = np.array([[ np.cos(yaw), -np.sin(yaw)],
-                      [ np.sin(yaw),  np.cos(yaw)]])
-        local_offsets = np.stack([dx_local.flatten(), dy_local.flatten()])  # (2, 49)
-        world_offsets = R @ local_offsets                                    # (2, 49)
-        wx = rx + world_offsets[0].reshape(GRID_ROWS, GRID_COLS)
-        wy = ry + world_offsets[1].reshape(GRID_ROWS, GRID_COLS)
+    def _get_height_scan(self):
+        rz     = self.data.qpos[2]
+        wx, wy = self._scan_world_xy()   # 관측 지점 world 좌표 (49,)
 
         # world 좌표 → heightmap 실수 인덱스 (bilinear interpolation)
-        cols = (wx + TERRAIN_HALF_X) / (2 * TERRAIN_HALF_X) * NCOL
-        rows = (wy + TERRAIN_HALF_Y) / (2 * TERRAIN_HALF_Y) * NROW
-        heights = map_coordinates(self._heightmap, [rows.flatten(), cols.flatten()], order=1, mode='nearest')
-        grid = heights.reshape(GRID_ROWS, GRID_COLS) * TERRAIN_MAX_H - rz
+        # 꼭짓점 NCOL개가 폭 전체에 NCOL-1칸 간격으로 놓이므로 스케일은 (NCOL-1) (MuJoCo hfield 정렬)
+        cols = (wx + TERRAIN_HALF_X) / (2 * TERRAIN_HALF_X) * (NCOL - 1)
+        rows = (wy + TERRAIN_HALF_Y) / (2 * TERRAIN_HALF_Y) * (NROW - 1)
+        heights = map_coordinates(self._heightmap, [rows, cols], order=1, mode='nearest')
+        scan = heights * TERRAIN_MAX_H - rz   # rover 기준 상대 높이
 
-        return grid.flatten().astype(np.float32)
+        return scan.astype(np.float32)
+
+    def _scan_world_xy(self):
+        """obs height scan 각 셀의 world (x, y) 좌표를 각각 (49,)로 반환.
+
+        _get_height_scan(관측)와 뷰어(관측 지점 시각화)가 공유한다. 각 점의 z(높이)는
+        obs의 height_scan에 rover z를 더하면 복원되므로 여기선 x, y만 계산한다.
+        회전만 하는 값싼 연산이라, 학습에는 얹지 않고 필요한 쪽이 그때그때 호출한다.
+        """
+        # TODO: 전방/후방 비율 조정 검토 (현재 대칭: 전방 3칸, 후방 3칸)
+        rx, ry = self.data.qpos[:2]
+        yaw = self._get_yaw()
+
+        # 로컬 오프셋(고정) → world 좌표 (local → world 회전)
+        R = np.array([[ np.cos(yaw), -np.sin(yaw)],
+                      [ np.sin(yaw),  np.cos(yaw)]])
+        world = R @ self._scan_offsets          # (2, 49)
+        return rx + world[0], ry + world[1]
 
     def _get_imu(self):
         # quaternion → roll, pitch
@@ -212,9 +251,8 @@ class LunarRoverEnv(gym.Env):
         return combined.astype(np.float32)
 
     def _terrain_height_at(self, x, y):
-        """world (x, y) 좌표의 실제 지형 높이 반환"""
-        col = int((x + TERRAIN_HALF_X) / (2 * TERRAIN_HALF_X) * NCOL)
-        row = int((y + TERRAIN_HALF_Y) / (2 * TERRAIN_HALF_Y) * NROW)
-        col = np.clip(col, 0, NCOL - 1)
-        row = np.clip(row, 0, NROW - 1)
-        return float(self._heightmap[row, col]) * TERRAIN_MAX_H
+        """world (x, y) 좌표의 지형 높이 반환 (obs와 동일한 bilinear 보간)"""
+        col = (x + TERRAIN_HALF_X) / (2 * TERRAIN_HALF_X) * (NCOL - 1)
+        row = (y + TERRAIN_HALF_Y) / (2 * TERRAIN_HALF_Y) * (NROW - 1)
+        h = map_coordinates(self._heightmap, [[row], [col]], order=1, mode='nearest')
+        return float(h[0]) * TERRAIN_MAX_H

@@ -5,7 +5,7 @@
   python sim_viewer.py --manual                 # 키보드 수동 조작
   python sim_viewer.py --policy models/ppo.zip  # 학습된 정책 (결과 확인)
 
-목표는 빨간 구로 표시하고, 콘솔에 거리·reward·소비일률을 출력한다.
+목표는 빨간 구, obs height-scan 관측 지점은 파란 점으로 표시하고, 콘솔에 거리·reward·소비일률을 출력한다.
 에피소드가 끝나면 자동 reset한다. (녹화는 학습 스크립트에서 별도로 처리)
 """
 import argparse
@@ -49,19 +49,10 @@ def make_policy_action(policy_path):
 
 
 # ===== 공통 뷰어 루프 =====
-def draw_goal(viewer, env):
-    """목표 지점을 빨간 구로 표시."""
-    gx, gy = env._goal
-    gz = env._terrain_height_at(gx, gy) + 0.3
-    mujoco.mjv_initGeom(
-        viewer.user_scn.geoms[0],
-        type=mujoco.mjtGeom.mjGEOM_SPHERE,
-        size=np.array([0.3, 0.0, 0.0]),
-        pos=np.array([gx, gy, gz]),
-        mat=np.eye(3).flatten(),
-        rgba=np.array([1.0, 0.2, 0.2, 0.6]),
-    )
-    viewer.user_scn.ngeom = 1
+def draw_markers(viewer, env, obs):
+    """목표·obs 관측 지점을 뷰어에 표시 (env._draw_markers 공용 헬퍼 사용, render와 동일)."""
+    viewer.user_scn.ngeom = 0                                    # 매 프레임 새로 채움
+    env._draw_markers(viewer.user_scn, obs[:env._scan_offsets.shape[1]])
 
 
 def run(action_fn, seed=SEED):
@@ -82,7 +73,7 @@ def run(action_fn, seed=SEED):
 
             power = float(np.sum(np.abs(env.data.actuator_force * env.data.actuator_velocity)))
 
-            draw_goal(viewer, env)
+            draw_markers(viewer, env, obs)
             viewer.cam.lookat[:] = env.data.qpos[:3]      # 카메라가 rover를 따라감
             viewer.sync()
             time.sleep(env.cfg.frame_skip * env.model.opt.timestep)  # 실시간 재생
