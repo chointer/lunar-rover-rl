@@ -52,6 +52,8 @@ class LunarRoverEnv(gym.Env):
         self._steer_qadr = [self.model.joint('steer_fl_joint').qposadr[0],
                             self.model.joint('steer_fr_joint').qposadr[0]]
 
+        self._wheel_radius = float(self.model.geom('wheel_fl_geom').size[0])   # slip 계산용 (cylinder 반지름)
+
     def reset(self, *, seed=None, options=None):
         super().reset(seed=seed)
 
@@ -135,7 +137,10 @@ class LunarRoverEnv(gym.Env):
         self._prev_dist = cur_dist   # progress 계산 후 갱신
 
         # 원시 측정값도 함께 (가중치가 0이어도 크기·발생 빈도를 볼 수 있게)
-        info = {**reward_info, "energy": energy, "collided": collided}
+        # reached/flipped는 학습 로그의 성공률·전복률 집계에 쓴다 (종료 원인 구분)
+        info = {**reward_info, "energy": energy, "collided": collided,
+                "reached": reached, "flipped": flipped,
+                "slip": self._get_slip(), "speed": float(self.data.sensordata[3])}
 
         return obs, reward, terminated, truncated, info
 
@@ -204,6 +209,17 @@ class LunarRoverEnv(gym.Env):
         steer       = self._get_steer()                                # 2
         goal_rel    = self._get_goal_rel()                             # 2  (뷰어가 obs[-2:]로 읽으므로 맨 뒤 유지)
         return np.concatenate([height_scan, imu, wheel_vel, steer, goal_rel])
+
+    def _get_slip(self):
+        """접지면 미끄러짐 속도 (m/s) — 바퀴가 구르는 속도와 실제 전진 속도의 차이. 모니터링 전용.
+
+        > 0 : 바퀴가 헛돎 (모래에서 힘만 쓰고 안 나감)   < 0 : 몸이 바퀴보다 빠름 (미끄러져 내려감/제동)
+        비율이 아닌 속도차라 정지 상태에서도 특이점이 없다 (0 − 0 = 0).
+        reward에는 넣지 않는다 — 회복을 위한 역주행까지 벌하게 되기 때문.
+        """
+        v_wheel = float(np.mean(self.data.sensordata[6:10])) * self._wheel_radius  # 바퀴 평균 각속도 → 선속도
+        v_body  = float(self.data.sensordata[3])                                    # 몸체 전진속도 (body frame vx)
+        return v_wheel - v_body
 
     def _get_steer(self):
         """앞바퀴 조향각 (rad). position 액추에이터라 명령을 5~8스텝에 걸쳐 따라가므로,
