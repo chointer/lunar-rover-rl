@@ -10,6 +10,8 @@
 """
 import argparse
 import time
+from pathlib import Path
+
 import numpy as np
 import mujoco
 import mujoco.viewer
@@ -39,12 +41,32 @@ def make_keyboard_action():
 
 
 def make_policy_action(policy_path):
-    """학습된 정책(.zip)을 로드해 action을 만드는 함수 반환 (PPO는 이 모드에서만 import)."""
+    """학습된 정책(.zip)을 로드해 action을 만드는 함수 반환 (PPO는 이 모드에서만 import).
+
+    학습 때 쓴 VecNormalize 통계(<정책명>_vecnorm.pkl)로 obs를 같은 방식으로 정규화한다.
+    이걸 빠뜨리면 정책이 학습 때와 다른 스케일의 obs를 보게 되어 엉뚱하게 움직인다.
+    """
+    import pickle
     from stable_baselines3 import PPO
     model = PPO.load(policy_path)
 
+    # PPO.load는 .zip 유무를 모두 받으므로, 통계 파일 경로는 .zip을 떼고 조립한다
+    vn_path = Path(str(policy_path).removesuffix(".zip") + "_vecnorm.pkl")
+    if vn_path.exists():
+        with open(vn_path, "rb") as f:
+            vecnorm = pickle.load(f)
+        rms, clip, eps = vecnorm.obs_rms, vecnorm.clip_obs, vecnorm.epsilon
+        print(f"obs 정규화 통계 로드: {vn_path}")
+
+        def normalize(obs):
+            return np.clip((obs - rms.mean) / np.sqrt(rms.var + eps), -clip, clip).astype(np.float32)
+    else:
+        print(f"경고: {vn_path} 없음 → obs 정규화 없이 실행 "
+              f"(학습에 VecNormalize를 썼다면 정책이 이상하게 움직입니다)")
+        normalize = lambda obs: obs
+
     def action_fn(obs):
-        return model.predict(obs, deterministic=True)[0]
+        return model.predict(normalize(obs), deterministic=True)[0]
     return action_fn
 
 
