@@ -28,8 +28,8 @@ class LunarRoverEnv(gym.Env):
         self.model = mujoco.MjModel.from_xml_path("envs/assets/rover.xml")
         self.data  = mujoco.MjData(self.model)
 
-        # obs: height_scan(49) + imu(8) + wheel_vel(4) + goal_rel(2) = 63
-        obs_dim = SCAN_ROWS * SCAN_COLS + 8 + 4 + 2
+        # obs: height_scan(49) + imu(8) + wheel_vel(4) + steer(2) + goal_rel(2) = 65
+        obs_dim = SCAN_ROWS * SCAN_COLS + 8 + 4 + 2 + 2
         self.observation_space = spaces.Box(
             low=-np.inf, high=np.inf, shape=(obs_dim,), dtype=np.float32
         )
@@ -47,6 +47,10 @@ class LunarRoverEnv(gym.Env):
         self._scan_offsets = np.stack([dx_local.flatten(), dy_local.flatten()])  # (2, 49)
 
         self._chassis_gid = self.model.geom('chassis_geom').id   # 충돌 판정용 (정상 주행은 바퀴만 닿음)
+
+        # 조향각 qpos 인덱스 (obs용). 이름으로 조회해 xml 변경에 안전하게
+        self._steer_qadr = [self.model.joint('steer_fl_joint').qposadr[0],
+                            self.model.joint('steer_fr_joint').qposadr[0]]
 
     def reset(self, *, seed=None, options=None):
         super().reset(seed=seed)
@@ -117,11 +121,12 @@ class LunarRoverEnv(gym.Env):
         # 4. 종료 판정
         cur_dist    = float(np.linalg.norm(self._goal - self.data.qpos[:2]))
         roll, pitch = obs[SCAN_ROWS * SCAN_COLS], obs[SCAN_ROWS * SCAN_COLS + 1]  # imu 앞 2개
-        reached = cur_dist < self.cfg.goal_radius
-        flipped = (abs(roll)  > np.deg2rad(self.cfg.flip_threshold_deg) or
-                   abs(pitch) > np.deg2rad(self.cfg.flip_threshold_deg))
+        # roll/pitch가 numpy 스칼라라 비교 결과도 np.bool_ → Gymnasium 규약대로 Python bool로 변환
+        reached = bool(cur_dist < self.cfg.goal_radius)
+        flipped = bool(abs(roll)  > np.deg2rad(self.cfg.flip_threshold_deg) or
+                       abs(pitch) > np.deg2rad(self.cfg.flip_threshold_deg))
         terminated = reached or flipped
-        truncated  = self._step_count >= self.cfg.max_steps
+        truncated  = bool(self._step_count >= self.cfg.max_steps)
 
         # 5. reward (항목별 가중합)
         collided = any(c.geom1 == self._chassis_gid or c.geom2 == self._chassis_gid
@@ -196,8 +201,15 @@ class LunarRoverEnv(gym.Env):
         height_scan = self._get_height_scan()                          # 49
         imu         = self._get_imu()                                  # 8
         wheel_vel   = self.data.sensordata[6:10].astype(np.float32)   # 4
-        goal_rel    = self._get_goal_rel()                             # 2
-        return np.concatenate([height_scan, imu, wheel_vel, goal_rel])
+        steer       = self._get_steer()                                # 2
+        goal_rel    = self._get_goal_rel()                             # 2  (뷰어가 obs[-2:]로 읽으므로 맨 뒤 유지)
+        return np.concatenate([height_scan, imu, wheel_vel, steer, goal_rel])
+
+    def _get_steer(self):
+        """앞바퀴 조향각 (rad). position 액추에이터라 명령을 5~8스텝에 걸쳐 따라가므로,
+        현재 각도를 관측하지 않으면 정책이 바퀴가 어디를 향하는지 모른 채 명령하게 된다.
+        """
+        return self.data.qpos[self._steer_qadr].astype(np.float32)
 
     def _get_height_scan(self):
         rz     = self.data.qpos[2]
