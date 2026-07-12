@@ -3,3 +3,6 @@ gymnasium
 stable-baselines3
 scipy
 numpy
+tensorboard
+tqdm
+rich
