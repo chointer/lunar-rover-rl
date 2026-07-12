@@ -46,6 +46,8 @@ class LunarRoverEnv(gym.Env):
         dy_local = (jj - hc) * SCAN_CELL   # 좌(+) / 우(-)
         self._scan_offsets = np.stack([dx_local.flatten(), dy_local.flatten()])  # (2, 49)
 
+        self._chassis_gid = self.model.geom('chassis_geom').id   # 충돌 판정용 (정상 주행은 바퀴만 닿음)
+
     def reset(self, *, seed=None, options=None):
         super().reset(seed=seed)
 
@@ -100,8 +102,13 @@ class LunarRoverEnv(gym.Env):
         self.data.ctrl[2:6] = speed   # 구동 4륜
 
         # 2. frame_skip만큼 물리 진행
+        #    에너지는 서브스텝마다 적산 (루프 후 값만 읽으면 그 사이 변동을 놓침).
+        #    회전 액추에이터라 일률 = τ·ω = force × velocity (N·m × rad/s = W), × timestep → J
+        energy = 0.0
         for _ in range(self.cfg.frame_skip):
             mujoco.mj_step(self.model, self.data)
+            power   = float(np.sum(np.abs(self.data.actuator_force * self.data.actuator_velocity)))
+            energy += power * self.model.opt.timestep
         self._step_count += 1
 
         # 3. obs
@@ -117,17 +124,30 @@ class LunarRoverEnv(gym.Env):
         truncated  = self._step_count >= self.cfg.max_steps
 
         # 5. reward (항목별 가중합)
-        reward = self._compute_reward(cur_dist, reached, flipped)
+        collided = any(c.geom1 == self._chassis_gid or c.geom2 == self._chassis_gid
+                       for c in self.data.contact[:self.data.ncon])
+        reward, reward_info = self._compute_reward(cur_dist, reached, flipped, energy, collided)
         self._prev_dist = cur_dist   # progress 계산 후 갱신
 
-        return obs, reward, terminated, truncated, {}
+        # 원시 측정값도 함께 (가중치가 0이어도 크기·발생 빈도를 볼 수 있게)
+        info = {**reward_info, "energy": energy, "collided": collided}
 
-    def _compute_reward(self, cur_dist, reached, flipped):
-        r  = self.cfg.w_progress * (self._prev_dist - cur_dist)  # 목표 접근 (직전 대비 거리 감소)
-        r -= self.cfg.w_time                                      # 시간 페널티 (매 스텝)
-        if reached: r += self.cfg.w_goal                          # 도달 보너스
-        if flipped: r -= self.cfg.w_flip                          # 전복 페널티
-        return float(r)
+        return obs, reward, terminated, truncated, info
+
+    def _compute_reward(self, cur_dist, reached, flipped, energy, collided):
+        """reward(가중합)와 항목별 기여도(r_*)를 반환. 기여도의 합이 reward."""
+        cfg = self.cfg
+        reward_info = {
+            "r_progress":  cfg.w_progress * (self._prev_dist - cur_dist),  # 목표 접근 (직전 대비 거리 감소)
+            "r_time":      -cfg.w_time,                                    # 시간 페널티 (매 스텝)
+            "r_goal":      cfg.w_goal if reached else 0.0,                 # 도달 보너스
+            "r_flip":      -cfg.w_flip if flipped else 0.0,                # 전복 페널티
+            # 고도화 (기본 가중치 0 → 비활성, 학습 중 단계적으로 켠다)
+            "r_energy":    -cfg.w_energy * energy,                         # 에너지 페널티
+            "r_collision": -cfg.w_collision if collided else 0.0,          # 충돌 페널티
+        }
+        reward = float(sum(reward_info.values()))
+        return reward, reward_info
 
     def render(self):
         """rgb_array 모드: mujoco.Renderer로 track 카메라 시점을 이미지로 반환."""

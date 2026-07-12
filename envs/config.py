@@ -23,6 +23,8 @@ class EnvConfig:
     w_goal:     float = 10.0   # 도달 보너스
     w_flip:     float = 10.0   # 전복 페널티 (reward에서 음수로 적용)
     w_time:     float = 0.01   # 시간 페널티 (매 스텝 −w_time)
+    w_energy:    float = 0.0   # 에너지 페널티 (매 스텝 −w_energy × energy) Σ|τ×ω|×dt (J). 너무 크면 "정지가 이득"(0J)이 되어 로버가 안 움직임 → 작게 시작
+    w_collision: float = 0.0   # 충돌 페널티 (섀시-지형 접촉한 스텝마다 −w_collision)
 
     # 마찰 도메인 랜덤화 범위 (reset마다 지형 전체에 단일값을 min~max에서 uniform 추출)
     #   sliding   낮을수록 잘 미끄러짐 (레골리스 저마찰) — 참고: 콘크리트~0.8, 젖은 흙~0.5, 모래~0.3, 느슨한 레골리스~0.2
