@@ -94,8 +94,10 @@ def main():
     model = PPO("MlpPolicy", venv, seed=args.seed, verbose=1, tensorboard_log="runs/")
 
     ckpt = CheckpointCallback(
-        save_freq=max(50_000 // args.n_envs, 1),   # save_freq는 env 하나당 스텝 기준
+        # save_freq는 venv.step() 호출 횟수 기준 (1회 = 총 n_envs 스텝) → 총 스텝으로 환산해 나눔
+        save_freq=max(50_000 // args.n_envs, 1),
         save_path="models/ckpt", name_prefix=args.run_name,
+        save_vecnormalize=True,   # 통계 없이 저장하면 그 체크포인트는 평가에 못 씀 (기본값이 False라 명시 필요)
     )
     model.learn(
         total_timesteps=args.timesteps,
