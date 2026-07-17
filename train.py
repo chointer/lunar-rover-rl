@@ -4,29 +4,35 @@
 성능 목표가 아니다. return이 오르고 도달률이 무작위(0%)보다 높아지면 통과.
 (참고: 휴리스틱 도달률 ~73%, 무작위 0% → 학습 신호는 존재)
 
-  python train.py                           # 기본 30만 스텝, 8 env 병렬
-  python train.py --timesteps 1000000       # 본 학습
-  tensorboard --logdir runs/                # 학습 곡선 확인
-  python sim_viewer.py --policy models/ppo  # 학습된 정책 눈으로 확인
+  python train.py --config configs/baseline.yaml
+  python train.py --config configs/w_time_low.yaml --timesteps 1000000   # CLI가 yaml을 덮어씀
+  tensorboard --logdir experiments            # 여러 실험 곡선 비교
+  python sim_viewer.py --policy experiments/<run>/ckpt/<run>_last_steps.zip
 
-VecNormalize 통계를 모델과 함께 저장한다(models/*_vecnorm.pkl). 이게 없으면 정책이
-학습 때와 다른 스케일의 obs를 보게 되어 엉뚱하게 움직인다 — 정책과 항상 세트로 다룰 것.
+설정은 yaml로 관리하고, 해석된 전체 설정을 experiments/<run>/config.yaml에 기록한다
+(덮어쓴 값만이 아니라 EnvConfig 전 필드 → 결과와 설정이 폴더 안에서 완결).
+
+VecNormalize 통계를 정책과 같은 이름 규칙으로 저장한다. 이게 없으면 정책이 학습 때와
+다른 스케일의 obs를 보게 되어 엉뚱하게 움직인다 — 정책과 항상 세트로 다룰 것.
 """
 import argparse
 from collections import defaultdict, deque
+from dataclasses import asdict, replace
 from pathlib import Path
 
+import yaml
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import BaseCallback, CheckpointCallback
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv, VecNormalize
 
+from envs.config import EnvConfig
 from envs.lunar_rover_env import LunarRoverEnv
 
 
-def make_env(seed, rank):
+def make_env(cfg, seed, rank):
     def _init():
-        env = LunarRoverEnv()
+        env = LunarRoverEnv(cfg=cfg)
         env.reset(seed=seed + rank)
         # Monitor는 VecNormalize 안쪽에 둔다 → ep_rew_mean이 정규화 전 원본 return으로 기록됨
         return Monitor(env)
@@ -76,34 +82,49 @@ class RolloutLogger(BaseCallback):
 
 def main():
     p = argparse.ArgumentParser(description="LunarRoverEnv PPO 학습")
-    p.add_argument("--timesteps", type=int, default=300_000, help="총 학습 스텝")
-    p.add_argument("--n-envs",    type=int, default=8,       help="병렬 env 개수")
-    p.add_argument("--seed",      type=int, default=0)
-    p.add_argument("--run-name",  type=str, default="ppo",   help="모델·로그 이름")
+    p.add_argument("--config", type=str, required=True, help="실험 설정 yaml (configs/*.yaml)")
+    # 아래는 yaml 값을 덮어쓰는 선택 인자 (자주 바꾸는 것만). 미지정이면 yaml을 따른다
+    p.add_argument("--run-name",  type=str, default=None)
+    p.add_argument("--timesteps", type=str, default=None, help="총 학습 스텝 (예: 1e6)")
     args = p.parse_args()
 
-    # 실험 하나의 산출물을 한 폴더에 모은다: experiments/<run>/{ckpt, tb}
-    exp_dir  = Path("experiments") / args.run_name
+    conf = yaml.safe_load(Path(args.config).read_text()) or {}
+    run_name  = args.run_name or conf["run_name"]
+    timesteps = int(float(args.timesteps)) if args.timesteps else int(conf["timesteps"])
+    n_envs, seed = int(conf["n_envs"]), int(conf["seed"])
+
+    env_cfg    = replace(EnvConfig(), **(conf.get("env") or {}))   # 미지정 필드는 EnvConfig 기본값
+    ppo_kwargs = conf.get("ppo") or {}                             # 비우면 SB3 기본값
+
+    # 실험 하나의 산출물을 한 폴더에 모은다: experiments/<run>/{config.yaml, ckpt, tb_N}
+    exp_dir  = Path("experiments") / run_name
     ckpt_dir = exp_dir / "ckpt"
     ckpt_dir.mkdir(parents=True, exist_ok=True)
 
-    venv_cls = SubprocVecEnv if args.n_envs > 1 else DummyVecEnv
-    venv = venv_cls([make_env(args.seed, i) for i in range(args.n_envs)])
+    # 해석된 전체 설정을 기록 (덮어쓴 값만이 아니라 EnvConfig 전 필드 → 결과와 설정이 폴더 안에서 완결)
+    (exp_dir / "config.yaml").write_text(yaml.safe_dump(
+        {"run_name": run_name, "timesteps": timesteps, "n_envs": n_envs, "seed": seed,
+         "env": asdict(env_cfg), "ppo": ppo_kwargs},
+        sort_keys=False, allow_unicode=True))
+
+    venv_cls = SubprocVecEnv if n_envs > 1 else DummyVecEnv
+    venv = venv_cls([make_env(env_cfg, seed, i) for i in range(n_envs)])
 
     # obs: 중심화+스케일링. goal_rel의 std가 height_scan의 20배라 그대로 넣으면 지형을 무시하게 됨
     # reward: 스케일만 (평균을 빼면 에피소드 길이에 유불리가 생겨 최적 정책이 바뀜)
     venv = VecNormalize(venv, norm_obs=True, norm_reward=True, clip_obs=10.0)
 
-    model = PPO("MlpPolicy", venv, seed=args.seed, verbose=1, tensorboard_log=str(exp_dir))
+    model = PPO("MlpPolicy", venv, seed=seed, verbose=1,
+                tensorboard_log=str(exp_dir), **ppo_kwargs)
 
     ckpt = CheckpointCallback(
         # save_freq는 venv.step() 호출 횟수 기준 (1회 = 총 n_envs 스텝) → 총 스텝으로 환산해 나눔
-        save_freq=max(50_000 // args.n_envs, 1),
-        save_path=str(ckpt_dir), name_prefix=args.run_name,
+        save_freq=max(50_000 // n_envs, 1),
+        save_path=str(ckpt_dir), name_prefix=run_name,
         save_vecnormalize=True,   # 통계 없이 저장하면 그 체크포인트는 평가에 못 씀 (기본값이 False라 명시 필요)
     )
     model.learn(
-        total_timesteps=args.timesteps,
+        total_timesteps=timesteps,
         callback=[RolloutLogger(), ckpt],
         tb_log_name="tb",         # experiments/<run>/tb_N/ (재실행마다 N 증가 → 곡선 분리 보존)
         progress_bar=True,
@@ -112,12 +133,13 @@ def main():
     # 최종 모델도 체크포인트와 동일한 이름 규칙으로 저장 (ID 자리에 "last")
     #   정책:  <run>_last_steps.zip   통계: <run>_vecnormalize_last_steps.pkl
     # → 중간 ckpt와 최종을 sim_viewer가 같은 규칙 하나로 짝지어 찾는다
-    model.save(str(ckpt_dir / f"{args.run_name}_last_steps.zip"))
-    venv.save(str(ckpt_dir / f"{args.run_name}_vecnormalize_last_steps.pkl"))
+    model.save(str(ckpt_dir / f"{run_name}_last_steps.zip"))
+    venv.save(str(ckpt_dir / f"{run_name}_vecnormalize_last_steps.pkl"))
     venv.close()
 
-    print(f"\n저장: {ckpt_dir}/{args.run_name}_last_steps.zip (+ vecnormalize 짝)")
-    print(f"확인: python sim_viewer.py --policy {ckpt_dir}/{args.run_name}_last_steps.zip")
+    print(f"\n저장: {ckpt_dir}/{run_name}_last_steps.zip (+ vecnormalize 짝)")
+    print(f"설정: {exp_dir}/config.yaml")
+    print(f"확인: python sim_viewer.py --policy {ckpt_dir}/{run_name}_last_steps.zip")
     print(f"곡선: tensorboard --logdir {exp_dir}   (여러 실험 비교는 --logdir experiments)")
 
 
