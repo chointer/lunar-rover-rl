@@ -221,3 +221,6 @@ __marimo__/
 docs/intro.md
 .vscode
 envs/assets/temporal_note.xml
+
+# 학습 산출물 (모델·정규화 통계·TensorBoard 로그)
+experiments/

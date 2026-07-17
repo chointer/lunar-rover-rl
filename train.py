@@ -82,7 +82,10 @@ def main():
     p.add_argument("--run-name",  type=str, default="ppo",   help="모델·로그 이름")
     args = p.parse_args()
 
-    Path("models").mkdir(exist_ok=True)
+    # 실험 하나의 산출물을 한 폴더에 모은다: experiments/<run>/{ckpt, tb}
+    exp_dir  = Path("experiments") / args.run_name
+    ckpt_dir = exp_dir / "ckpt"
+    ckpt_dir.mkdir(parents=True, exist_ok=True)
 
     venv_cls = SubprocVecEnv if args.n_envs > 1 else DummyVecEnv
     venv = venv_cls([make_env(args.seed, i) for i in range(args.n_envs)])
@@ -91,27 +94,31 @@ def main():
     # reward: 스케일만 (평균을 빼면 에피소드 길이에 유불리가 생겨 최적 정책이 바뀜)
     venv = VecNormalize(venv, norm_obs=True, norm_reward=True, clip_obs=10.0)
 
-    model = PPO("MlpPolicy", venv, seed=args.seed, verbose=1, tensorboard_log="runs/")
+    model = PPO("MlpPolicy", venv, seed=args.seed, verbose=1, tensorboard_log=str(exp_dir))
 
     ckpt = CheckpointCallback(
         # save_freq는 venv.step() 호출 횟수 기준 (1회 = 총 n_envs 스텝) → 총 스텝으로 환산해 나눔
         save_freq=max(50_000 // args.n_envs, 1),
-        save_path="models/ckpt", name_prefix=args.run_name,
+        save_path=str(ckpt_dir), name_prefix=args.run_name,
         save_vecnormalize=True,   # 통계 없이 저장하면 그 체크포인트는 평가에 못 씀 (기본값이 False라 명시 필요)
     )
     model.learn(
         total_timesteps=args.timesteps,
         callback=[RolloutLogger(), ckpt],
-        tb_log_name=args.run_name,
+        tb_log_name="tb",         # experiments/<run>/tb_N/ (재실행마다 N 증가 → 곡선 분리 보존)
         progress_bar=True,
     )
 
-    model.save(f"models/{args.run_name}")
-    venv.save(f"models/{args.run_name}_vecnorm.pkl")   # obs 정규화 통계 — 정책과 항상 세트
+    # 최종 모델도 체크포인트와 동일한 이름 규칙으로 저장 (ID 자리에 "last")
+    #   정책:  <run>_last_steps.zip   통계: <run>_vecnormalize_last_steps.pkl
+    # → 중간 ckpt와 최종을 sim_viewer가 같은 규칙 하나로 짝지어 찾는다
+    model.save(str(ckpt_dir / f"{args.run_name}_last_steps.zip"))
+    venv.save(str(ckpt_dir / f"{args.run_name}_vecnormalize_last_steps.pkl"))
     venv.close()
 
-    print(f"\n저장: models/{args.run_name}.zip + models/{args.run_name}_vecnorm.pkl")
-    print(f"확인: python sim_viewer.py --policy models/{args.run_name}")
+    print(f"\n저장: {ckpt_dir}/{args.run_name}_last_steps.zip (+ vecnormalize 짝)")
+    print(f"확인: python sim_viewer.py --policy {ckpt_dir}/{args.run_name}_last_steps.zip")
+    print(f"곡선: tensorboard --logdir {exp_dir}   (여러 실험 비교는 --logdir experiments)")
 
 
 if __name__ == "__main__":

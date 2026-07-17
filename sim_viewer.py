@@ -40,18 +40,32 @@ def make_keyboard_action():
     return action_fn
 
 
+def _vecnorm_for(policy_path):
+    """정책 zip 경로 → 짝이 되는 VecNormalize 통계 pkl 경로.
+
+    train.py·SB3 CheckpointCallback의 이름 규칙을 그대로 뒤집는다:
+      <prefix>_<ID>_steps.zip  ↔  <prefix>_vecnormalize_<ID>_steps.pkl
+    (ID는 중간 ckpt면 스텝 수, 최종이면 "last"). 규칙 하나로 둘 다 짝을 찾는다.
+    """
+    p = Path(policy_path)
+    stem = p.stem                                    # <prefix>_<ID>_steps
+    if stem.endswith("_steps"):
+        prefix, ident = stem.removesuffix("_steps").rsplit("_", 1)
+        return p.with_name(f"{prefix}_vecnormalize_{ident}_steps.pkl")
+    return p.with_name(p.stem + "_vecnormalize.pkl")   # 규칙 밖 이름이면 단순 폴백
+
+
 def make_policy_action(policy_path):
     """학습된 정책(.zip)을 로드해 action을 만드는 함수 반환 (PPO는 이 모드에서만 import).
 
-    학습 때 쓴 VecNormalize 통계(<정책명>_vecnorm.pkl)로 obs를 같은 방식으로 정규화한다.
+    학습 때 쓴 VecNormalize 통계를 같은 폴더에서 찾아 obs를 동일하게 정규화한다.
     이걸 빠뜨리면 정책이 학습 때와 다른 스케일의 obs를 보게 되어 엉뚱하게 움직인다.
     """
     import pickle
     from stable_baselines3 import PPO
     model = PPO.load(policy_path)
 
-    # PPO.load는 .zip 유무를 모두 받으므로, 통계 파일 경로는 .zip을 떼고 조립한다
-    vn_path = Path(str(policy_path).removesuffix(".zip") + "_vecnorm.pkl")
+    vn_path = _vecnorm_for(policy_path)
     if vn_path.exists():
         with open(vn_path, "rb") as f:
             vecnorm = pickle.load(f)
