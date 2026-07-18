@@ -1,0 +1,15 @@
+# exp00-05 easy_goal_3m — 승자(exp00-04-easy_goal)를 길게 돌려 상한 확인.
+#   04(300k)가 도달 15%로 그룹 1위 → "쉬운 목표(2~4m)에서 충분히 학습하면 어디까지 가나".
+#   조향상관·도달률이 계속 오르면 다음은 커리큘럼(2~4m → 3~8m 점진 확장)으로.
+#
+#   python train.py --config configs/exp00-flat-tuning/exp00-05-easy_goal_3m.yaml   (~38분)
+group:     exp00-flat-tuning
+run_name:  exp00-05-easy_goal_3m
+timesteps: 3000000
+n_envs:    8
+seed:      0
+
+env:
+  goal_dist_min: 2.0
+  goal_dist_max: 4.0
+ppo: {}

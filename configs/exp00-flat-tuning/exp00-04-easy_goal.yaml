@@ -1,0 +1,15 @@
+# exp00-04 easy_goal — 가설: 큰 선회가 조향 학습을 막음 (Ackermann 최소반경 1.28m).
+#   목표 3~8m 사방(절반이 뒤쪽) → 2~4m로 줄여 필요한 선회를 낮춤.
+#   (커리큘럼 "쉬운 것부터"의 1단계 — 고정 완화로 "쉬우면 학습되나"부터 확인)
+#
+#   python train.py --config configs/exp00-flat-tuning/exp00-04-easy_goal.yaml
+group:     exp00-flat-tuning
+run_name:  exp00-04-easy_goal
+timesteps: 300000
+n_envs:    8
+seed:      0
+
+env:
+  goal_dist_min: 2.0   # baseline 3.0
+  goal_dist_max: 4.0   # baseline 8.0
+ppo: {}

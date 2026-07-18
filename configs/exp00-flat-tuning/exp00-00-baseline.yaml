@@ -1,0 +1,15 @@
+# exp00-flat-tuning — 평지에서 조향 학습이 안 되는 병목을 찾아 뚫는 실험 그룹
+#   (정책이 goal_rel을 갖고도 휴리스틱 73%를 못 이김 → 세팅의 무엇이 학습을 막나)
+#
+# exp00-00 baseline — 기준점. 모든 비교의 대조군.
+#   결과: 도달 ~5%, 스로틀 0.28, 조향상관 +0.23 (스로틀만 배우고 조향은 정체)
+#
+#   python train.py --config configs/exp00-flat-tuning/exp00-00-baseline.yaml
+group:     exp00-flat-tuning
+run_name:  exp00-00-baseline
+timesteps: 300000
+n_envs:    8
+seed:      0
+
+env: {}
+ppo: {}

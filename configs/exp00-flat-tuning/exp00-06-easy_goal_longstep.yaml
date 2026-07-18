@@ -1,0 +1,21 @@
+# exp00-06 easy_goal_longstep — 쉬운 조건(2~4m) + 긴 에피소드(max_steps 1000) 성능 상한 push.
+#   exp00-05 해부: 도달 25% + "아깝게(0.5~1.5m)" 25% + "멀리서 헤맴" 50%, 평균 ep길이 426/500.
+#   max_steps 500→1000으로 학습. (평가 기준 goal_radius=0.5는 그대로 → 반칙 아님)
+#
+#   공정 비교: exp00-05와 "에피소드 수"를 맞춰 max_steps만 격리한다.
+#      exp00-05: 3M / 500  = 6000 에피소드, max_steps 500
+#      exp00-06: 6M / 1000 = 6000 에피소드, max_steps 1000  → 에피소드 수 같음, max_steps만 다름 ✅
+#   판독(vs exp00-05): 도달률 오르면 긴 에피소드가 학습에 이득. 그대로면 max_steps 무관.
+#
+#   python train.py --config configs/exp00-flat-tuning/exp00-06-easy_goal_longstep.yaml   (~75분)
+group:     exp00-flat-tuning
+run_name:  exp00-06-easy_goal_longstep
+timesteps: 6000000
+n_envs:    8
+seed:      0
+
+env:
+  goal_dist_min: 2.0
+  goal_dist_max: 4.0
+  max_steps: 1000   # baseline 500의 2배
+ppo: {}

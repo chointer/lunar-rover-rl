@@ -1,0 +1,14 @@
+# exp00-01 w_time_low — 가설: 시간 페널티가 progress를 상쇄해 "손익분기 속도"(0.2 m/s)에 갇힘.
+#   손익분기 = w_time/(w_progress×dt) → 0.01/(1.0×0.05)=0.2  →  0.001로 0.02 m/s.
+#   결과: ❌ 반증. 스로틀 그대로(0.29→0.31), 조향상관 오히려 ↓(0.09). 손익분기 일치는 우연이었음.
+#
+#   python train.py --config configs/exp00-flat-tuning/exp00-01-w_time_low.yaml
+group:     exp00-flat-tuning
+run_name:  exp00-01-w_time_low
+timesteps: 300000
+n_envs:    8
+seed:      0
+
+env:
+  w_time: 0.001   # baseline 0.01의 1/10
+ppo: {}

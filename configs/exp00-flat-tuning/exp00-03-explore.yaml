@@ -1,0 +1,15 @@
+# exp00-03 explore — 가설: 탐험 노이즈(σ=1.0)가 조향 신호(~0.22)를 3배로 덮어 학습을 막음.
+#   log_std_init=-1.0 → σ≈0.37로 시작해 조향 신호/노이즈비를 처음부터 개선.
+#   (정책이 답을 받는 게 아니라 탐험 폭만 조절 — 여전히 스스로 조향을 발견해야 함)
+#
+#   python train.py --config configs/exp00-flat-tuning/exp00-03-explore.yaml
+group:     exp00-flat-tuning
+run_name:  exp00-03-explore
+timesteps: 300000
+n_envs:    8
+seed:      0
+
+env: {}
+ppo:
+  policy_kwargs:
+    log_std_init: -1.0   # σ = exp(-1) ≈ 0.37 (baseline은 0.0 → 1.0)

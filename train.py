@@ -95,16 +95,18 @@ def main():
 
     env_cfg    = replace(EnvConfig(), **(conf.get("env") or {}))   # 미지정 필드는 EnvConfig 기본값
     ppo_kwargs = conf.get("ppo") or {}                             # 비우면 SB3 기본값
+    group      = conf.get("group")                                 # 실험 묶음 (없으면 experiments/ 바로 밑)
 
-    # 실험 하나의 산출물을 한 폴더에 모은다: experiments/<run>/{config.yaml, ckpt, tb_N}
-    exp_dir  = Path("experiments") / run_name
+    # 산출물을 한 폴더에 모은다: experiments/[<group>/]<run>/{config.yaml, ckpt, tb_N}
+    base_dir = Path("experiments") / group if group else Path("experiments")
+    exp_dir  = base_dir / run_name
     ckpt_dir = exp_dir / "ckpt"
     ckpt_dir.mkdir(parents=True, exist_ok=True)
 
     # 해석된 전체 설정을 기록 (덮어쓴 값만이 아니라 EnvConfig 전 필드 → 결과와 설정이 폴더 안에서 완결)
     (exp_dir / "config.yaml").write_text(yaml.safe_dump(
-        {"run_name": run_name, "timesteps": timesteps, "n_envs": n_envs, "seed": seed,
-         "env": asdict(env_cfg), "ppo": ppo_kwargs},
+        {"group": group, "run_name": run_name, "timesteps": timesteps, "n_envs": n_envs,
+         "seed": seed, "env": asdict(env_cfg), "ppo": ppo_kwargs},
         sort_keys=False, allow_unicode=True))
 
     venv_cls = SubprocVecEnv if n_envs > 1 else DummyVecEnv

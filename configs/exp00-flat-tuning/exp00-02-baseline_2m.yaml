@@ -1,0 +1,12 @@
+# exp00-02 baseline_2m — 가설: 그냥 학습 부족. baseline과 스텝 수만 다름(300k→2M).
+#   결과: 도달 ~12%로 소폭↑, 그러나 조향은 여전히 병목(완전 해결 안 됨) → 학습량만으론 부족.
+#
+#   python train.py --config configs/exp00-flat-tuning/exp00-02-baseline_2m.yaml   (~26분)
+group:     exp00-flat-tuning
+run_name:  exp00-02-baseline_2m
+timesteps: 2000000
+n_envs:    8
+seed:      0
+
+env: {}
+ppo: {}
