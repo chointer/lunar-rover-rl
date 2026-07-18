@@ -91,8 +91,8 @@ def draw_markers(viewer, env, obs):
     env._draw_markers(viewer.user_scn, obs[:env._scan_offsets.shape[1]])
 
 
-def run(action_fn, seed=SEED):
-    env = LunarRoverEnv()
+def run(action_fn, cfg=None, seed=SEED):
+    env = LunarRoverEnv(cfg=cfg)
     obs, _ = env.reset(seed=seed)
 
     with mujoco.viewer.launch_passive(env.model, env.data) as viewer:
@@ -137,7 +137,15 @@ def main():
     src = parser.add_mutually_exclusive_group()
     src.add_argument("--manual", action="store_true", help="키보드 수동 조작")
     src.add_argument("--policy", type=str, default=None, help="학습된 정책(.zip) 경로")
+    parser.add_argument("--goal-range", type=float, nargs=2, metavar=("MIN", "MAX"),
+                        default=None, help="목표 거리 범위 (예: --goal-range 2 4). 정책의 학습 조건과 맞춰서 봄")
     args = parser.parse_args()
+
+    # 목표 거리를 학습 조건과 맞출 수 있게 (지정 안 하면 EnvConfig 기본 3~8m)
+    cfg = None
+    if args.goal_range:
+        from envs.config import EnvConfig
+        cfg = EnvConfig(goal_dist_min=args.goal_range[0], goal_dist_max=args.goal_range[1])
 
     if args.policy:
         action_fn = make_policy_action(args.policy)
@@ -149,7 +157,7 @@ def main():
         action_fn = heuristic_action
         print("휴리스틱 모드 (목표 방향 자동 주행)")
 
-    run(action_fn)
+    run(action_fn, cfg=cfg)
 
 
 if __name__ == "__main__":
