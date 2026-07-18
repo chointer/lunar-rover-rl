@@ -14,6 +14,11 @@ class EnvConfig:
     frame_skip: int   = 10     # policy 1스텝당 물리 스텝 수 (0.005×10=0.05s → 20Hz)
     max_steps:  int   = 500    # 타임아웃 (=25초)
 
+    # 목표 생성 (spawn 기준 반경 min~max m, 각도는 360° 균등)
+    #   거리를 줄이면 선회 난이도가 낮아짐 → 커리큘럼(쉬운 것부터)의 1단계로 활용
+    goal_dist_min: float = 3.0
+    goal_dist_max: float = 8.0
+
     # 종료 판정
     goal_radius:        float = 0.5   # m   — 목표 도달 판정 반경
     flip_threshold_deg: float = 60.0  # deg — |roll| 또는 |pitch| 이 이상이면 전복

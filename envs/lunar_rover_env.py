@@ -80,9 +80,9 @@ class LunarRoverEnv(gym.Env):
         self.data.qpos[1] = spawn_y
         self.data.qpos[2] = ground_z + 0.25   # + 바퀴 반지름(0.15) + 바퀴-chassis 오프셋(0.1)
 
-        # 목표 지점: spawn 기준 반경 3~8m 사이 랜덤, 지형 경계(절대 좌표) 안쪽으로 제한
+        # 목표 지점: spawn 기준 반경 [goal_dist_min, goal_dist_max] 랜덤, 지형 경계(절대 좌표) 안쪽으로 제한
         while True:
-            angle,r         = self.np_random.uniform(0, 2 * np.pi), self.np_random.uniform(3.0, 8.0)
+            angle,r         = self.np_random.uniform(0, 2 * np.pi), self.np_random.uniform(self.cfg.goal_dist_min, self.cfg.goal_dist_max)
             goal_x, goal_y  = spawn_x + r * np.cos(angle), spawn_y + r * np.sin(angle)
             if abs(goal_x) < TERRAIN_HALF_X - 1 and abs(goal_y) < TERRAIN_HALF_Y - 1:
                 self._goal = np.array([goal_x, goal_y], dtype=np.float32)
