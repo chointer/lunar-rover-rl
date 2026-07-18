@@ -1,0 +1,18 @@
+# exp01-easy-push — "가장 쉬운 태스크(2~4m)를 왜 90%+ 못 하는가"를 근본 레버로 공략.
+#   exp00 결론: easy_goal이 유일하게 유효했으나 2~4m에서도 25%에 그침(발판 부실).
+#   커리큘럼 이전에 이 발판을 90%+로 만드는 게 먼저. 레버를 하나씩 독립 격리.
+#   모두 2~4m 고정 + 2M. 평가는 자기 조건(2~4m)과 전이(3~8m) 둘 다.
+#
+# exp01-00 baseline — 2M 기준점 (01~03이 이걸 상대로 각 한 변수만 바꿈).
+#
+#   python train.py --config configs/exp01-easy-push/exp01-00-baseline.yaml
+group:     exp01-easy-goal
+run_name:  exp01-00-baseline
+timesteps: 2000000
+n_envs:    8
+seed:      0
+
+env:
+  goal_dist_min: 2.0
+  goal_dist_max: 4.0
+ppo: {}

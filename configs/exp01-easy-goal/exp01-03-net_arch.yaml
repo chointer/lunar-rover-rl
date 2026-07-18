@@ -1,0 +1,17 @@
+# exp01-03 net_arch — 가설: 기본 64×64 MLP가 obs(65D: 지형49+imu8+wheel4+steer2+goal2)를
+#   처리하기엔 용량이 부족. 256×256으로 키워 표현력을 높임.
+#   판독(vs exp01-00): 도달률이 오르면 용량이 병목이었음. 안 오르면 용량 문제 아님.
+#
+#   python train.py --config configs/exp01-easy-push/exp01-03-net_arch.yaml
+group:     exp01-easy-goal
+run_name:  exp01-03-net_arch
+timesteps: 2000000
+n_envs:    8
+seed:      0
+
+env:
+  goal_dist_min: 2.0
+  goal_dist_max: 4.0
+ppo:
+  policy_kwargs:
+    net_arch: [256, 256]   # baseline [64, 64]

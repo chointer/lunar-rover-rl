@@ -1,0 +1,18 @@
+# exp01-04 max_steer — 가설: 최소 회전반경이 커서(Ackermann) 옆 목표를 못 좁혀 맴돎.
+#   R = 축간거리/tan(max_steer) = 0.7/tan(0.5) ≈ 1.28m → 회전원(지름 2.56m) 안의 목표는
+#   전진 선회로 못 닿음(Dubins). max_steer 0.5→0.8이면 R ≈ 0.68m로 줄어 옆 목표가 원 밖으로.
+#   판독(vs exp01-00): 옆 각도(60~90°) 성공률이 뛰면 기구학적 한계가 병목이었음.
+#   (조향 한계는 로봇 설계 파라미터 — 채점 기준을 바꾸는 반칙이 아님. 단 실제 스펙과는 별개)
+#
+#   python train.py --config configs/exp01-easy-push/exp01-04-max_steer.yaml
+group:     exp01-easy-goal
+run_name:  exp01-04-max_steer
+timesteps: 2000000
+n_envs:    8
+seed:      0
+
+env:
+  goal_dist_min: 2.0
+  goal_dist_max: 4.0
+  max_steer: 0.8   # baseline 0.5 (R 1.28m → 0.68m)
+ppo: {}

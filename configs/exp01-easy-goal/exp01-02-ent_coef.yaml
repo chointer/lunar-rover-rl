@@ -1,0 +1,17 @@
+# exp01-02 ent_coef — 가설: 탐험 부족으로 "멀리서 헤맴"(실패의 50%)이 발생.
+#   ent_coef 0.0→0.01로 엔트로피 보너스를 줘 정책이 더 다양하게 탐험하게 함.
+#   (exp00-03 explore는 σ를 '낮춰' 역효과였음 → 반대로 탐험을 '늘리는' 방향 검증)
+#   판독(vs exp01-00): "멀리서 헤맴" 비율이 줄고 도달률이 오르면 탐험 부족이 원인.
+#
+#   python train.py --config configs/exp01-easy-push/exp01-02-ent_coef.yaml
+group:     exp01-easy-goal
+run_name:  exp01-02-ent_coef
+timesteps: 2000000
+n_envs:    8
+seed:      0
+
+env:
+  goal_dist_min: 2.0
+  goal_dist_max: 4.0
+ppo:
+  ent_coef: 0.01   # baseline 0.0
