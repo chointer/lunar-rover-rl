@@ -54,6 +54,13 @@ class LunarRoverEnv(gym.Env):
 
         self._wheel_radius = float(self.model.geom('wheel_fl_geom').size[0])   # slip 계산용 (cylinder 반지름)
 
+        # 조향 물리 한계를 cfg.max_steer에 맞춘다. xml 기본은 ±0.5라, cfg만 키우면 여기서 포화돼
+        # 무효가 됨 → joint range·actuator ctrlrange를 함께 ±max_steer로 덮어써야 실제로 반영된다.
+        for jn in ("steer_fl_joint", "steer_fr_joint"):
+            self.model.joint(jn).range[:] = [-self.cfg.max_steer, self.cfg.max_steer]
+        for an in ("act_steer_fl", "act_steer_fr"):
+            self.model.actuator(an).ctrlrange[:] = [-self.cfg.max_steer, self.cfg.max_steer]
+
     def reset(self, *, seed=None, options=None):
         super().reset(seed=seed)
 
