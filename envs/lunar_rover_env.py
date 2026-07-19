@@ -100,6 +100,19 @@ class LunarRoverEnv(gym.Env):
         for _ in range(100):                        # 제어 입력 없이 100스텝 진행하여 rover가 지면에 안착하도록 대기
             mujoco.mj_step(self.model, self.data)
 
+        # 평가·커리큘럼용: options로 goal의 heading 기준 각도·거리를 지정 (Gymnasium 표준 통로)
+        #   options={"goal_dist": 3.0, "goal_angle": 90}  → 정면 기준 왼쪽 90°, 3m
+        #   한쪽만 줘도 됨 — 지정 안 한 축은 위에서 뽑은 랜덤 goal 값을 유지.
+        #   안착 뒤 heading 기준으로 배치해야 실제 조향 각도와 일치한다.
+        if options and ("goal_dist" in options or "goal_angle" in options):
+            rx, ry = self.data.qpos[:2]
+            yaw    = self._get_yaw()
+            v      = self._goal - np.array([rx, ry])                    # 현재(랜덤) goal 상대 벡터
+            d      = float(options.get("goal_dist", np.hypot(*v)))      # 미지정 시 랜덤 거리 유지
+            ang    = (yaw + np.deg2rad(options["goal_angle"])           # 미지정 시 랜덤 각도 유지
+                      if "goal_angle" in options else np.arctan2(v[1], v[0]))
+            self._goal = np.array([rx + d * np.cos(ang), ry + d * np.sin(ang)], dtype=np.float32)
+
         # 에피소드 상태 초기화 (step에서 사용)
         self._step_count = 0                        # 타임아웃 카운터
         self._prev_dist  = float(np.linalg.norm(self._goal - self.data.qpos[:2]))  # potential reward 기준 거리
