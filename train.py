@@ -86,16 +86,19 @@ def main():
     # 아래는 yaml 값을 덮어쓰는 선택 인자 (자주 바꾸는 것만). 미지정이면 yaml을 따른다
     p.add_argument("--run-name",  type=str, default=None)
     p.add_argument("--timesteps", type=str, default=None, help="총 학습 스텝 (예: 1e6)")
+    p.add_argument("--seed",      type=int, default=None, help="난수 시드 (seed sweep용)")
+    p.add_argument("--group",     type=str, default=None, help="실험 묶음 (config 재사용해 다른 그룹으로)")
     args = p.parse_args()
 
     conf = yaml.safe_load(Path(args.config).read_text()) or {}
     run_name  = args.run_name or conf["run_name"]
     timesteps = int(float(args.timesteps)) if args.timesteps else int(conf["timesteps"])
-    n_envs, seed = int(conf["n_envs"]), int(conf["seed"])
+    seed      = args.seed if args.seed is not None else int(conf["seed"])
+    group     = args.group or conf.get("group")                    # 실험 묶음 (없으면 experiments/ 바로 밑)
+    n_envs    = int(conf["n_envs"])
 
     env_cfg    = replace(EnvConfig(), **(conf.get("env") or {}))   # 미지정 필드는 EnvConfig 기본값
     ppo_kwargs = conf.get("ppo") or {}                             # 비우면 SB3 기본값
-    group      = conf.get("group")                                 # 실험 묶음 (없으면 experiments/ 바로 밑)
 
     # 산출물을 한 폴더에 모은다: experiments/[<group>/]<run>/{config.yaml, ckpt, tb_N}
     base_dir = Path("experiments") / group if group else Path("experiments")
