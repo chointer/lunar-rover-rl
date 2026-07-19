@@ -1,0 +1,20 @@
+# exp03-low-slip — "조향 병목이 레골리스 slip(저마찰) 때문인가"를 통제실험으로 검증.
+#   가설: 급선회 시 바퀴가 헛돌아(wheel spin) 옆 목표를 못 감 (물리 vs 학습 미결 항목).
+#   설계: exp01-00-baseline과 friction_sliding만 다르게(0.2~0.5 → 0.7~0.9, 단단한 지면).
+#         torsional·rolling은 baseline 유지 → slip 단일변수만 격리.
+#   비교 대상: exp01-00-baseline (동일 goal 2~4m, 2M, seed 0).
+#   해석: low-slip에서 옆(60~120°) 성공률이 크게 오르면 → 병목에 물리(slip) 기여 있음.
+#         변화 없으면 → 순수 학습 문제 (BC/reward 쪽 처방이 맞음).
+#
+#   python train.py --config configs/exp03-low-slip/exp03-00-low-slip.yaml
+group:     exp03-low-slip
+run_name:  exp03-00-low-slip
+timesteps: 2000000
+n_envs:    8
+seed:      0
+
+env:
+  goal_dist_min: 2.0
+  goal_dist_max: 4.0
+  friction_sliding: [0.7, 0.9]   # baseline 0.2~0.5 대비 단단한 지면 (slip 적음)
+ppo: {}
