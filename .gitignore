@@ -224,3 +224,11 @@ envs/assets/temporal_note.xml
 
 # 학습 산출물 (모델·정규화 통계·TensorBoard 로그)
 experiments/
+
+# BC 산출물 (재생성 가능: 시연 데이터·모델·평가 그림)
+bc/*.npz
+bc/*.pt
+bc/eval_plots/
+
+# scratchpad 산출물이 repo 루트에 잘못 생성되는 것 방지
+scratchpad_*.pkl
