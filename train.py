@@ -99,6 +99,7 @@ def main():
 
     env_cfg    = replace(EnvConfig(), **(conf.get("env") or {}))   # 미지정 필드는 EnvConfig 기본값
     ppo_kwargs = conf.get("ppo") or {}                             # 비우면 SB3 기본값
+    ckpt_freq  = int(conf.get("ckpt_freq", 200_000))               # 체크포인트 저장 주기(총 스텝), config로 덮어쓰기 가능
 
     # 산출물을 한 폴더에 모은다: experiments/[<group>/]<run>/{config.yaml, ckpt, tb_N}
     base_dir = Path("experiments") / group if group else Path("experiments")
@@ -124,7 +125,7 @@ def main():
 
     ckpt = CheckpointCallback(
         # save_freq는 venv.step() 호출 횟수 기준 (1회 = 총 n_envs 스텝) → 총 스텝으로 환산해 나눔
-        save_freq=max(50_000 // n_envs, 1),
+        save_freq=max(ckpt_freq // n_envs, 1),
         save_path=str(ckpt_dir), name_prefix=run_name,
         save_vecnormalize=True,   # 통계 없이 저장하면 그 체크포인트는 평가에 못 씀 (기본값이 False라 명시 필요)
     )
