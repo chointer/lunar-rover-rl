@@ -58,8 +58,17 @@ def normalizer(vn_path):
 
 def rollout(env, model, norm, angle, dist, seed, deterministic):
     obs, _ = env.reset(seed=seed, options={"goal_angle": angle, "goal_dist": dist})
+    # gSDE 탐험은 매 스텝 랜덤이 아니라 '탐험행렬 W'를 뽑아 sde_sample_freq 스텝 동안 고정한다.
+    # predict()는 W를 자동 갱신하지 않으므로, stochastic 롤아웃에선 학습과 똑같이 우리가 직접
+    # 시작 시 + freq 스텝마다 reset_noise()로 W를 새로 뽑아준다. (안 하면 W가 고정→롤아웃들이 동일→fan 붕괴)
+    use_sde = getattr(model, "use_sde", False) and not deterministic
+    freq    = getattr(model, "sde_sample_freq", -1)
+    if use_sde:
+        model.policy.reset_noise()
     path = [env.data.qpos[:2].copy()]
-    for _ in range(env.cfg.max_steps):
+    for i in range(env.cfg.max_steps):
+        if use_sde and freq > 0 and i > 0 and i % freq == 0:
+            model.policy.reset_noise()
         act = model.predict(norm(obs), deterministic=deterministic)[0]
         obs, _, term, trunc, _ = env.step(act)
         path.append(env.data.qpos[:2].copy())

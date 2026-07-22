@@ -18,6 +18,16 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 
+def sig_is_gsde(sigma):
+    """gSDE는 σ가 [잠재특징, action] 행렬(2D), 가우시안은 action별 [2] 벡터(1D)."""
+    return np.asarray(sigma).ndim > 1
+
+
+def sig_mag(sigma):
+    """스냅샷 σ의 대표 크기(스칼라). gSDE 행렬은 |값|의 평균으로 탐험 가중치 크기를 요약."""
+    return float(np.mean(np.abs(np.asarray(sigma))))
+
+
 def grid_pos(angle_deg):
     """goal 방향에 맞춰 3x3 격자 위치 (row, col). 예: 좌상단 goal(135°) → (0,0). 중앙은 빔."""
     a = np.radians(angle_deg)
@@ -64,15 +74,24 @@ def plot_group(snaps, all_snaps, conditions, title, out):
     # → 색 ↔ step ↔ σ 대응이 그림 안에서 바로 읽혀 별도 범례가 필요 없다
     axc = axgrid[1][1]
     all_steps = [s["step"] for s in all_snaps]
-    all_sig   = np.array([s["sigma"] for s in all_snaps])
-    axc.plot(all_steps, all_sig[:, 1], "-",  color="0.55", lw=1.6, label="sigma steer")
-    axc.plot(all_steps, all_sig[:, 0], "--", color="0.75", lw=1.3, label="sigma throttle")
-    for k, s in enumerate(snaps):
-        axc.plot(s["step"], s["sigma"][1], "o", color=colors[k % len(colors)], ms=13, zorder=5)
-        axc.annotate(f"{s['step']/1000:.0f}k", (s["step"], s["sigma"][1]),
-                     textcoords="offset points", xytext=(7, 7), fontsize=10)
-    axc.set_xlabel("training step"); axc.set_ylabel("sigma = exp(log_std)")
-    axc.set_title("exploration sigma"); axc.legend(fontsize=8); axc.grid(alpha=0.3)
+    if sig_is_gsde(all_snaps[0]["sigma"]):        # gSDE: σ가 행렬 → 대표 크기 1개 곡선
+        axc.plot(all_steps, [sig_mag(s["sigma"]) for s in all_snaps], "-", color="0.55", lw=1.6)
+        for k, s in enumerate(snaps):
+            axc.plot(s["step"], sig_mag(s["sigma"]), "o", color=colors[k % len(colors)], ms=13, zorder=5)
+            axc.annotate(f"{s['step']/1000:.0f}k", (s["step"], sig_mag(s["sigma"])),
+                         textcoords="offset points", xytext=(7, 7), fontsize=10)
+        axc.set_ylabel("mean |gSDE weight sigma|")
+    else:                                          # 가우시안: action별 σ
+        all_sig = np.array([s["sigma"] for s in all_snaps])
+        axc.plot(all_steps, all_sig[:, 1], "-",  color="0.55", lw=1.6, label="sigma steer")
+        axc.plot(all_steps, all_sig[:, 0], "--", color="0.75", lw=1.3, label="sigma throttle")
+        for k, s in enumerate(snaps):
+            axc.plot(s["step"], s["sigma"][1], "o", color=colors[k % len(colors)], ms=13, zorder=5)
+            axc.annotate(f"{s['step']/1000:.0f}k", (s["step"], s["sigma"][1]),
+                         textcoords="offset points", xytext=(7, 7), fontsize=10)
+        axc.set_ylabel("sigma = exp(log_std)"); axc.legend(fontsize=8)
+    axc.set_xlabel("training step")
+    axc.set_title("exploration sigma"); axc.grid(alpha=0.3)
 
     fig.suptitle(f"{title}   thin=stochastic(explore)  thick=deterministic(intent)", fontsize=13)
     fig.tight_layout(rect=[0, 0, 1, 0.96])
@@ -81,14 +100,19 @@ def plot_group(snaps, all_snaps, conditions, title, out):
 
 
 def plot_sigma(snaps, out):
-    steps  = [s["step"] for s in snaps]
-    sigmas = np.array([s["sigma"] for s in snaps])
+    steps = [s["step"] for s in snaps]
     fig, ax = plt.subplots(figsize=(7, 4.5))
-    ax.plot(steps, sigmas[:, 0], "-o", ms=5, label="sigma throttle")
-    ax.plot(steps, sigmas[:, 1], "-o", ms=5, label="sigma steer")
-    ax.set_xlabel("training step"); ax.set_ylabel("sigma = exp(log_std)")
+    if sig_is_gsde(snaps[0]["sigma"]):             # gSDE: 대표 크기 1개 곡선
+        ax.plot(steps, [sig_mag(s["sigma"]) for s in snaps], "-o", ms=5)
+        ax.set_ylabel("mean |gSDE weight sigma|")
+    else:
+        sigmas = np.array([s["sigma"] for s in snaps])
+        ax.plot(steps, sigmas[:, 0], "-o", ms=5, label="sigma throttle")
+        ax.plot(steps, sigmas[:, 1], "-o", ms=5, label="sigma steer")
+        ax.set_ylabel("sigma = exp(log_std)"); ax.legend()
+    ax.set_xlabel("training step")
     ax.set_title("Exploration sigma over training")
-    ax.legend(); ax.grid(alpha=0.3)
+    ax.grid(alpha=0.3)
     fig.tight_layout(); fig.savefig(out, dpi=110); plt.close(fig)
     return out
 
