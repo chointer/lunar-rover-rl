@@ -1,0 +1,22 @@
+# exp04-explore — 탐험 방식 개선으로 옆 방향 실패를 푸는가
+#   진단: 화이트 i.i.d. 가우시안 노이즈가 관성·조향지연 계에서 느린 변수(heading)에서 상쇄됨
+#         → "한 방향 조향 지속"이 안 뽑혀 옆 목표를 못 감 (탐험 붕괴).
+#   처방: gSDE — 노이즈를 상태 함수로 뽑아 sde_sample_freq마다만 갱신 → 시간상관·지속적 탐험.
+#
+# exp04-00 gsde — exp01-00-baseline과 use_sde만 다르게(격리). 목표 2~4m, 2M, seed 0 동일.
+#   비교 대상: exp01-00-baseline (옆 60~120° 약 6~7%).
+#   측정: 옆 성공률 + 스냅샷 fan 공간 퍼짐 (σ 곡선 아님 — gSDE는 σ 해석이 다름).
+#
+#   python train.py --config configs/exp04-explore/exp04-00-gsde.yaml
+group:     exp04-explore
+run_name:  exp04-00-gsde
+timesteps: 2000000
+n_envs:    8
+seed:      0
+
+env:
+  goal_dist_min: 2.0
+  goal_dist_max: 4.0
+ppo:
+  use_sde: true
+  sde_sample_freq: 8   # 8~16 권고(로코모션). 이 스텝마다 탐험 노이즈 갱신

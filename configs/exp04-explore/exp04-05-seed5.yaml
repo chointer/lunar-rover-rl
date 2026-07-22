@@ -1,0 +1,13 @@
+# exp04-05 gsde seed5 — 멀티시드 신뢰도용. exp02(baseline 3M·seed5)와 3M·seed 매칭.
+#   본 비교: gSDE seed1~5(3M) vs baseline exp02 seed1~5(3M). use_sde만 차이.
+group:     exp04-explore
+run_name:  exp04-05-seed5
+timesteps: 3000000
+n_envs:    8
+seed:      5
+env:
+  goal_dist_min: 2.0
+  goal_dist_max: 4.0
+ppo:
+  use_sde: true
+  sde_sample_freq: 8
