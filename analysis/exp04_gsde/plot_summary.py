@@ -14,7 +14,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 HERE = Path(__file__).parent
-COLORS = {"gSDE": "#0072B2", "baseline": "#E69F00"}
+COLORS = {"gSDE": "#0072B2", "baseline": "#E69F00", "heuristic": "#009E73"}
 BANDS = [("front |angle|<=30", 0, 30), ("side 60-120", 60, 120), ("back |angle|>=150", 150, 180)]
 
 
@@ -45,10 +45,11 @@ def plot(d, out=None):
         ax.set_xlabel("goal distance (m)")
         ax.set_xticks(dists)
         ax.grid(alpha=0.25, lw=0.6)
-        ax.set_ylim(-3, 78)
+        ax.set_ylim(-3, 103)
     axes[0].set_ylabel("reach rate (%)")
-    axes[1].legend(loc="upper right", framealpha=0.9, fontsize=10)
-    fig.suptitle("Reach rate by band and distance — gSDE vs baseline (5 seeds, mean ± std)", fontsize=12)
+    axes[1].legend(loc="upper left", framealpha=0.9, fontsize=10)
+    fig.suptitle("Reach rate by band and distance — heuristic vs gSDE vs baseline "
+                 "(learned: 5-seed mean ± std)", fontsize=12)
     fig.tight_layout(rect=[0, 0, 1, 0.95])
     out = out or (HERE / "band_summary.png")
     fig.savefig(out, dpi=120)

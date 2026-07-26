@@ -234,4 +234,4 @@ bc/eval_plots/
 scratchpad_*.pkl
 
 # 재생성 가능한 큰 스냅샷 원자료 (fan 그림은 커밋, pkl은 snapshot_from_ckpts.py로 재생성 ~3분)
-analysis/**/traj_snapshots*.pkl
+analysis/**/*snapshots*.pkl

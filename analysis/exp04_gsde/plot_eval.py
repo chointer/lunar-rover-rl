@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 HERE = Path(__file__).parent
 
 # Okabe-Ito CVD-안전 색 (그룹=정체성). 전 스크립트 공통 라벨: gSDE=파랑, baseline=주황.
-COLORS = {"gSDE": "#0072B2", "baseline": "#E69F00"}
+COLORS = {"gSDE": "#0072B2", "baseline": "#E69F00", "heuristic": "#009E73"}
 SIDE = (60, 120)   # 옆 밴드(|각도|) — 핵심 구간 음영
 
 
@@ -65,8 +65,8 @@ def plot(d, out=None):
 
     # 범례(2계열) — 한 번만
     axes[0][0].legend(loc="upper right", framealpha=0.9, fontsize=9)
-    fig.suptitle("Reach rate by goal angle — gSDE vs baseline (5 seeds each)\n"
-                 "bold = seed mean, faint = individual seeds, shaded = side band",
+    fig.suptitle("Reach rate by goal angle — heuristic vs gSDE vs baseline\n"
+                 "learned (gSDE/baseline): 5-seed mean, faint = seeds · heuristic = hand-designed expert · shaded = side band",
                  fontsize=12)
     fig.tight_layout(rect=[0, 0, 1, 0.94])
 
