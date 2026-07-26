@@ -85,13 +85,21 @@ def main():
     p.add_argument("--n-stochastic", type=int, default=8)
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--out",  type=str, default=None)
+    p.add_argument("--steps", type=int, nargs="*", default=None,
+                   help="명시적 ckpt step 목록. 지정 시 subsample 대신 이 step들만 사용 "
+                        "(간격 다른 런끼리 step 정렬을 맞출 때)")
     args = p.parse_args()
 
     run_dir = Path(args.run); run = run_dir.name
     cfg = replace(EnvConfig(), **(yaml.safe_load((run_dir / "config.yaml").read_text()).get("env") or {}))
     env = LunarRoverEnv(cfg=cfg)
 
-    ckpts = subsample(find_ckpts(run_dir / "ckpt", run), args.n)
+    all_ckpts = find_ckpts(run_dir / "ckpt", run)
+    if args.steps:
+        want = set(args.steps)
+        ckpts = [c for c in all_ckpts if c[0] in want]
+    else:
+        ckpts = subsample(all_ckpts, args.n)
     print(f"{run}: 체크포인트 {len(ckpts)}개 사용 (steps {[s for s,_,_ in ckpts]})")
 
     snapshots = []
